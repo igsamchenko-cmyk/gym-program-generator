@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, Component } from "react";
 import ExcelJS from "exceljs/dist/exceljs.min.js";
 
 /* Автономне сховище: той самий контракт {get,set,delete}, що й window.storage
@@ -579,8 +579,17 @@ function markHeavy(day) {
   return day;
 }
 
-function buildPlan(p) {
-  const allowed = new Set(EQUIP_SETS[p.place]);
+function buildPlan(pRaw) {
+  // Незалежно від того, звідки прийшов профіль (форма, localStorage старої версії,
+  // ручний виклик) — масивні поля мають бути масивами, інакше нижче все впаде.
+  const p = {
+    ...pRaw,
+    priority: Array.isArray(pRaw.priority) ? pRaw.priority : [],
+    limits: Array.isArray(pRaw.limits) ? pRaw.limits : [],
+    customDays: Array.isArray(pRaw.customDays) ? pRaw.customDays : [],
+    weekdays: Array.isArray(pRaw.weekdays) ? pRaw.weekdays : [],
+  };
+  const allowed = new Set(EQUIP_SETS[p.place] || EQUIP_SETS.gym);
   if (p.bar) allowed.add('pullupbar');
   const fl = ageFlags(p.age);
   const maxDiff = fl.teen ? 2 : p.level === 'beg' ? 2 : 3;
@@ -1123,7 +1132,7 @@ function Wizard({ p, set, onBuild }) {
         <input type="checkbox" checked={ok} onChange={(e) => setOk(e.target.checked)} />
         <span>Я почуваюся здоровим для силових навантажень і розумію, що цей план — не медична порада. За наявності болю, хронічних хвороб або перерви після травми спершу консультуюся з лікарем.</span>
       </label>
-      <button className="tk-cta" disabled={!ok || !customReady} onClick={onBuild}>
+      <button className="tk-cta" disabled={!ok || !customReady} onClick={() => onBuild()}>
         {customReady ? 'Скласти програму' : 'Заповни всі дні розкладки'}
       </button>
     </div>
@@ -1228,30 +1237,79 @@ function VolumePanel({ plan, week }) {
   );
 }
 
-export default function TrainingConstructor() {
-  const [profile, setProfile] = useState({
-    age: 39, sex: 'm', level: 'adv', days: 3, mode: 'auto',
-    customDays: [{ groups: ['back', 'biceps'] }, { groups: ['chest', 'delts', 'triceps'] }, { groups: ['quads', 'hams', 'glutes', 'calves'] }],
-    place: 'gym', bar: true, goal: 'hyper', priority: ['back', 'chest'], limits: [],
-    weekdays: [0, 2, 4], timeCap: null, fatigue: false, seed: 0,
-  });
+const DEFAULT_PROFILE = {
+  age: 39, sex: 'm', level: 'adv', days: 3, mode: 'auto',
+  customDays: [{ groups: ['back', 'biceps'] }, { groups: ['chest', 'delts', 'triceps'] }, { groups: ['quads', 'hams', 'glutes', 'calves'] }],
+  place: 'gym', bar: true, goal: 'hyper', priority: ['back', 'chest'], limits: [],
+  weekdays: [0, 2, 4], timeCap: null, fatigue: false, seed: 0,
+};
+// Профіль, збережений старішою версією застосунку, може не мати щойно доданих полів.
+// Замість заміни стану цілком — зливаємо з дефолтами й перевіряємо, що масиви лишаються масивами.
+function sanitizeProfile(saved) {
+  if (!saved || typeof saved !== 'object') return DEFAULT_PROFILE;
+  const merged = { ...DEFAULT_PROFILE, ...saved };
+  const arr = (v, fallback) => (Array.isArray(v) ? v : fallback);
+  merged.priority = arr(saved.priority, DEFAULT_PROFILE.priority);
+  merged.limits = arr(saved.limits, DEFAULT_PROFILE.limits);
+  merged.weekdays = arr(saved.weekdays, DEFAULT_PROFILE.weekdays);
+  merged.customDays = arr(saved.customDays, DEFAULT_PROFILE.customDays).map((d) => ({ groups: arr(d && d.groups, []), name: d && d.name }));
+  return merged;
+}
+
+class ErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="tk" data-theme={this.props.theme}>
+          <style>{CSS}</style>
+          <Header theme={this.props.theme} onToggle={this.props.onThemeToggle} />
+          <div className="tk-main">
+            <div className="tk-alert">
+              <b>Щось пішло не так</b>
+              Сталася непередбачена помилка. Найімовірніша причина — застарілі дані в збереженому профілі.
+            </div>
+            <button className="tk-cta" onClick={async () => { try { await storage.delete('tk-state'); } catch (e) {} location.reload(); }}>
+              Скинути збережені дані й почати заново
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function TrainingConstructorInner({ theme, onThemeToggle }) {
+  const [profile, setProfile] = useState(DEFAULT_PROFILE);
   const [anchors, setAnchors] = useState({});
   const [loaded, setLoaded] = useState(false);
   const [plan, setPlan] = useState(null);
   const [wk, setWk] = useState(0);
   const [day, setDay] = useState(0);
   const [swaps, setSwaps] = useState({});
-  const [theme, setTheme] = useState(() => {
-    try {
-      const saved = localStorage.getItem('tk-theme');
-      if (saved === 'dark' || saved === 'light') return saved;
-      return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-    } catch (e) { return 'light'; }
-  });
+  const [buildErr, setBuildErr] = useState(null);
   const set = (patch) => setProfile((s) => ({ ...s, ...patch }));
-  const build = (p) => { const prof = p || profile; setPlan(buildPlan(prof)); setWk(0); setDay(0); setSwaps({}); };
-  const variant = () => { const prof = { ...profile, seed: (profile.seed || 0) + 1 }; setProfile(prof); setPlan(buildPlan(prof)); setSwaps({}); };
-  const setFatigue = (v) => { const prof = { ...profile, fatigue: v }; setProfile(prof); setPlan(buildPlan(prof)); };
+  const build = (p) => {
+    try {
+      const prof = p || profile;
+      setPlan(buildPlan(prof));
+      setWk(0); setDay(0); setSwaps({}); setBuildErr(null);
+    } catch (e) { setBuildErr(e.message || String(e)); }
+  };
+  const variant = () => {
+    try {
+      const prof = { ...profile, seed: (profile.seed || 0) + 1 };
+      setProfile(prof); setPlan(buildPlan(prof)); setSwaps({}); setBuildErr(null);
+    } catch (e) { setBuildErr(e.message || String(e)); }
+  };
+  const setFatigue = (v) => {
+    try {
+      const prof = { ...profile, fatigue: v };
+      setProfile(prof); setPlan(buildPlan(prof)); setBuildErr(null);
+    } catch (e) { setBuildErr(e.message || String(e)); }
+  };
 
   // збереження між сесіями
   useEffect(() => {
@@ -1260,7 +1318,11 @@ export default function TrainingConstructor() {
         const r = await storage.get('tk-state');
         if (r && r.value) {
           const st = JSON.parse(r.value);
-          if (st.profile) { setProfile(st.profile); if (st.built) setPlan(buildPlan(st.profile)); }
+          if (st.profile) {
+            const safe = sanitizeProfile(st.profile);
+            setProfile(safe);
+            if (st.built) setPlan(buildPlan(safe));
+          }
           if (st.anchors) setAnchors(st.anchors);
           if (st.swaps) setSwaps(st.swaps);
         }
@@ -1274,9 +1336,6 @@ export default function TrainingConstructor() {
       try { await storage.set('tk-state', JSON.stringify({ profile, anchors, swaps, built: !!plan })); } catch (e) {}
     })();
   }, [profile, anchors, swaps, plan, loaded]);
-  useEffect(() => {
-    try { localStorage.setItem('tk-theme', theme); } catch (e) {}
-  }, [theme]);
   const reset = async () => { try { await storage.delete('tk-state'); } catch (e) {} setAnchors({}); setSwaps({}); setPlan(null); };
 
   const view = useMemo(() => {
@@ -1336,8 +1395,19 @@ export default function TrainingConstructor() {
   if (!plan || !view) {
     return (
       <div className="tk" data-theme={theme}><style>{CSS}</style>
-        <Header theme={theme} onToggle={() => setTheme((t) => t === 'dark' ? 'light' : 'dark')} />
-        <div className="tk-main"><Wizard p={profile} set={set} onBuild={build} /></div>
+        <Header theme={theme} onToggle={onThemeToggle} />
+        <div className="tk-main">
+          {buildErr && (
+            <div className="tk-alert">
+              <b>Не вдалося скласти програму</b>
+              {buildErr}. Найімовірніша причина — застарілий збережений профіль. Спробуй скинути дані й заповнити анкету заново.
+              <div style={{ marginTop: 10 }}>
+                <button className="tk-mini" style={{ paddingLeft: 0 }} onClick={reset}>Скинути збережені дані</button>
+              </div>
+            </div>
+          )}
+          <Wizard p={profile} set={set} onBuild={build} />
+        </div>
       </div>
     );
   }
@@ -1369,7 +1439,7 @@ export default function TrainingConstructor() {
   return (
     <div className="tk" data-theme={theme}>
       <style>{CSS}</style>
-      <Header theme={theme} onToggle={() => setTheme((t) => t === 'dark' ? 'light' : 'dark')} />
+      <Header theme={theme} onToggle={onThemeToggle} />
       <div className="tk-main">
         <div className="tk-card">
           <div className="tk-chips">
@@ -1478,5 +1548,24 @@ export default function TrainingConstructor() {
         <p className="tk-foot">Це навчальний прототип, а не медична порада. Різкий біль, оніміння чи запаморочення — привід зупинити тренування й звернутися до лікаря.</p>
       </div>
     </div>
+  );
+}
+
+export default function TrainingConstructor() {
+  const [theme, setTheme] = useState(() => {
+    try {
+      const saved = localStorage.getItem('tk-theme');
+      if (saved === 'dark' || saved === 'light') return saved;
+      return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    } catch (e) { return 'light'; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('tk-theme', theme); } catch (e) {}
+  }, [theme]);
+  const toggleTheme = () => setTheme((t) => t === 'dark' ? 'light' : 'dark');
+  return (
+    <ErrorBoundary theme={theme} onThemeToggle={toggleTheme}>
+      <TrainingConstructorInner theme={theme} onThemeToggle={toggleTheme} />
+    </ErrorBoundary>
   );
 }
