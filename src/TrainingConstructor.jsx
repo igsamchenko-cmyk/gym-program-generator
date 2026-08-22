@@ -1,6 +1,24 @@
 import { useState, useMemo, useEffect } from "react";
 import * as XLSX from "xlsx";
 
+/* Автономне сховище: той самий контракт {get,set,delete}, що й window.storage
+   у середовищі Claude-артефактів, але на звичайному localStorage браузера.
+   Завдяки однаковій формі відповіді решта коду нижче не змінюється. */
+const storage = {
+  async get(key) {
+    try {
+      const v = localStorage.getItem(key);
+      return v === null ? null : { key, value: v };
+    } catch (e) { return null; }
+  },
+  async set(key, value) {
+    try { localStorage.setItem(key, value); return { key, value }; } catch (e) { return null; }
+  },
+  async delete(key) {
+    try { localStorage.removeItem(key); return { key, deleted: true }; } catch (e) { return null; }
+  },
+};
+
 /* ============================================================
    БАЗА ВПРАВ — 94 рухи, 18 підспецифікацій
    rg — підспецифікація · tp — темп · sd — вимога до стабілізаторів
@@ -1200,7 +1218,7 @@ export default function TrainingConstructor() {
   useEffect(() => {
     (async () => {
       try {
-        const r = await window.storage.get('tk-state');
+        const r = await storage.get('tk-state');
         if (r && r.value) {
           const st = JSON.parse(r.value);
           if (st.profile) { setProfile(st.profile); if (st.built) setPlan(buildPlan(st.profile)); }
@@ -1214,10 +1232,10 @@ export default function TrainingConstructor() {
   useEffect(() => {
     if (!loaded) return;
     (async () => {
-      try { await window.storage.set('tk-state', JSON.stringify({ profile, anchors, swaps, built: !!plan })); } catch (e) {}
+      try { await storage.set('tk-state', JSON.stringify({ profile, anchors, swaps, built: !!plan })); } catch (e) {}
     })();
   }, [profile, anchors, swaps, plan, loaded]);
-  const reset = async () => { try { await window.storage.delete('tk-state'); } catch (e) {} setAnchors({}); setSwaps({}); setPlan(null); };
+  const reset = async () => { try { await storage.delete('tk-state'); } catch (e) {} setAnchors({}); setSwaps({}); setPlan(null); };
 
   const view = useMemo(() => {
     if (!plan) return null;
