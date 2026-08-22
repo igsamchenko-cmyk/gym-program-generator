@@ -846,11 +846,17 @@ function warmup(plan, day) {
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
 .tk{--ink:#14181A;--surf:#E9EDEA;--card:#FFF;--steel:#66736F;--line:#D3D9D5;--deep:#2E2A72;--dl:#2FA090;--hot:#B4402F;
- font-family:'IBM Plex Sans',system-ui,sans-serif;background:var(--surf);color:var(--ink);min-height:100%;line-height:1.5;}
+ --bar:#14181A;--bar-text:#EDF0EE;--bar-muted:#8A9B95;--alert:#FBEFEC;--alert-line:#E6C3B9;
+ font-family:'IBM Plex Sans',system-ui,sans-serif;background:var(--surf);color:var(--ink);min-height:100vh;line-height:1.5;color-scheme:light;}
+.tk[data-theme="dark"]{--ink:#F1F5F3;--surf:#0B0E0D;--card:#151A18;--steel:#A8B4B0;--line:#303A36;--deep:#746CE8;--dl:#4FC4B0;--hot:#E87360;
+ --bar:#070908;--bar-text:#F1F5F3;--bar-muted:#93A29C;--alert:#2B1815;--alert-line:#704036;color-scheme:dark;}
 .tk *{box-sizing:border-box;}
-.tk-bar{background:var(--ink);color:#EDF0EE;padding:18px 20px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;}
+.tk-bar{background:var(--bar);color:var(--bar-text);padding:18px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
 .tk-mark{font-family:'Unbounded',sans-serif;font-weight:700;font-size:17px;letter-spacing:-.02em;}
-.tk-sub{font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8A9B95;text-transform:uppercase;letter-spacing:.1em;}
+.tk-sub{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--bar-muted);text-transform:uppercase;letter-spacing:.1em;}
+.tk-theme{font:inherit;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--bar-text);background:transparent;border:1px solid var(--bar-muted);border-radius:2px;padding:7px 10px;cursor:pointer;margin-left:auto;}
+.tk-theme:hover{border-color:var(--bar-text);}
+.tk-theme:focus-visible{outline:2px solid var(--bar-text);outline-offset:2px;}
 .tk-main{max-width:900px;margin:0 auto;padding:20px 16px 64px;}
 .tk-card{background:var(--card);border:1px solid var(--line);border-radius:4px;padding:20px;margin-bottom:14px;}
 .tk-eyebrow{font-family:'IBM Plex Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--steel);margin-bottom:10px;}
@@ -860,11 +866,11 @@ const CSS = `
 .tk-lbl{display:block;font-size:13px;font-weight:600;margin-bottom:8px;}
 .tk-hint{font-size:12px;color:var(--steel);margin-top:6px;}
 .tk-opts{display:flex;flex-wrap:wrap;gap:6px;}
-.tk-opt{font:inherit;font-size:13px;padding:8px 13px;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:2px;cursor:pointer;}
+.tk-opt{font:inherit;font-size:13px;padding:8px 13px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:2px;cursor:pointer;}
 .tk-opt:hover{border-color:var(--deep);}
 .tk-opt[aria-pressed="true"]{background:var(--deep);border-color:var(--deep);color:#fff;}
 .tk-opt:focus-visible,.tk-wk:focus-visible,.tk-day:focus-visible,.tk-mini:focus-visible{outline:2px solid var(--deep);outline-offset:2px;}
-.tk-num{font:inherit;font-family:'IBM Plex Mono',monospace;width:88px;padding:9px 11px;border:1px solid var(--line);border-radius:2px;background:#fff;}
+.tk-num{font:inherit;font-family:'IBM Plex Mono',monospace;width:88px;padding:9px 11px;border:1px solid var(--line);border-radius:2px;background:var(--card);color:var(--ink);}
 .tk-cta{font:inherit;font-family:'Unbounded',sans-serif;font-weight:500;font-size:15px;width:100%;padding:15px;background:var(--deep);color:#fff;border:none;border-radius:3px;cursor:pointer;}
 .tk-cta[disabled]{background:#A9B3AF;cursor:not-allowed;}
 .tk-check{display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--steel);margin-bottom:14px;}
@@ -878,8 +884,8 @@ const CSS = `
 .tk-rir{font-family:'Unbounded',sans-serif;font-weight:700;font-size:22px;letter-spacing:-.03em;}
 .tk-rir small{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:400;color:var(--steel);display:block;letter-spacing:0;}
 .tk-days{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;}
-.tk-day{font:inherit;font-size:13px;padding:8px 13px;border:1px solid var(--line);background:#fff;border-radius:2px;cursor:pointer;color:var(--ink);}
-.tk-day[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:#fff;}
+.tk-day{font:inherit;font-size:13px;padding:8px 13px;border:1px solid var(--line);background:var(--card);border-radius:2px;cursor:pointer;color:var(--ink);}
+.tk-day[aria-pressed="true"]{background:var(--deep);border-color:var(--deep);color:#fff;}
 .tk-warm{background:var(--surf);border-radius:3px;padding:12px 14px;margin-bottom:16px;font-size:13px;}
 .tk-warm ul{margin:6px 0 0;padding-left:18px;}
 .tk-warm li{margin-bottom:3px;}
@@ -914,20 +920,34 @@ const CSS = `
 .tk-rule{border-top:1px solid var(--line);padding:12px 0 0;margin-top:12px;font-size:13px;}
 .tk-load{display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap;}
 .tk-load b{font-family:'IBM Plex Mono',monospace;font-size:14px;background:var(--deep);color:#fff;padding:2px 8px;border-radius:2px;}
-.tk-wnum{font:inherit;font-family:'IBM Plex Mono',monospace;width:104px;padding:5px 8px;border:1px solid var(--line);border-radius:2px;background:#fff;font-size:12px;}
-.tk-why{background:#fff;border:1px dashed var(--line);border-left:2px solid var(--dl);padding:10px 12px;margin-top:9px;font-size:12.5px;}
+.tk-wnum{font:inherit;font-family:'IBM Plex Mono',monospace;width:104px;padding:5px 8px;border:1px solid var(--line);border-radius:2px;background:var(--card);color:var(--ink);font-size:12px;}
+.tk-why{background:var(--card);border:1px dashed var(--line);border-left:2px solid var(--dl);padding:10px 12px;margin-top:9px;font-size:12.5px;}
 .tk-why ul{margin:4px 0 0;padding-left:16px;}
 .tk-why li{margin-bottom:2px;color:var(--steel);}
-.tk-alert{background:#FBEFEC;border:1px solid #E6C3B9;border-radius:3px;padding:12px 14px;font-size:13px;margin-bottom:14px;}
+.tk-alert{background:var(--alert);border:1px solid var(--alert-line);border-radius:3px;padding:12px 14px;font-size:13px;margin-bottom:14px;}
 .tk-alert b{display:block;font-size:11px;font-family:'IBM Plex Mono',monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--hot);margin-bottom:4px;}
 .tk-meta{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--steel);margin-bottom:12px;}
 .tk-wdays{display:flex;gap:4px;flex-wrap:wrap;}
-.tk-wd{font:inherit;font-family:'IBM Plex Mono',monospace;font-size:12px;width:42px;padding:8px 0;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:2px;cursor:pointer;}
-.tk-wd[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:#fff;}
+.tk-wd{font:inherit;font-family:'IBM Plex Mono',monospace;font-size:12px;width:42px;padding:8px 0;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:2px;cursor:pointer;}
+.tk-wd[aria-pressed="true"]{background:var(--deep);border-color:var(--deep);color:#fff;}
 .tk-rule b{display:block;font-size:11px;font-family:'IBM Plex Mono',monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--steel);margin-bottom:3px;}
 @media (max-width:520px){.tk-volrow{grid-template-columns:92px 1fr 52px;}.tk-ramp{height:92px;}}
 @media (prefers-reduced-motion:reduce){.tk-wk span{transition:none;}}
 `;
+
+function Header({ theme, onToggle }) {
+  const dark = theme === 'dark';
+  return (
+    <div className="tk-bar">
+      <span className="tk-mark">Конструктор тренувань</span>
+      <span className="tk-sub">Макроцикл · RIR за SFR · делоад</span>
+      <button type="button" className="tk-theme" aria-pressed={dark} onClick={onToggle}
+        aria-label={dark ? 'Увімкнути світлу тему' : 'Увімкнути темну тему'}>
+        {dark ? '☀ Світла тема' : '◐ Темна тема'}
+      </button>
+    </div>
+  );
+}
 
 function ageNote(a) {
   const f = ageFlags(a);
@@ -978,6 +998,14 @@ function FreqCheck({ p }) {
 
 function Wizard({ p, set, onBuild }) {
   const [ok, setOk] = useState(false);
+  const [ageDraft, setAgeDraft] = useState(String(p.age));
+  useEffect(() => { setAgeDraft(String(p.age)); }, [p.age]);
+  const commitAge = () => {
+    const parsed = Number(ageDraft);
+    const age = Number.isFinite(parsed) && ageDraft !== '' ? Math.min(70, Math.max(14, Math.round(parsed))) : p.age;
+    setAgeDraft(String(age));
+    if (age !== p.age) set({ age });
+  };
   const setDay = (i, groups) => {
     const cd = Array.from({ length: Math.max(p.days, i + 1) }).map((_, k) => p.customDays[k] || { groups: [] });
     cd[i] = { groups };
@@ -998,8 +1026,12 @@ function Wizard({ p, set, onBuild }) {
 
       <div className="tk-field">
         <label className="tk-lbl" htmlFor="tk-age">Вік</label>
-        <input id="tk-age" className="tk-num" type="number" min="14" max="70" value={p.age}
-          onChange={(e) => set({ age: Math.min(70, Math.max(14, Number(e.target.value) || 14)) })} />
+        <input id="tk-age" className="tk-num" type="text" inputMode="numeric" pattern="[0-9]*" maxLength={2}
+          value={ageDraft} onChange={(e) => setAgeDraft(e.target.value.replace(/\D/g, '').slice(0, 2))}
+          onBlur={commitAge} onKeyDown={(e) => {
+            if (e.key === 'Enter') e.currentTarget.blur();
+            if (e.key === 'Escape') { setAgeDraft(String(p.age)); e.currentTarget.blur(); }
+          }} />
         <div className="tk-hint">{ageNote(p.age)}</div>
       </div>
 
@@ -1209,6 +1241,13 @@ export default function TrainingConstructor() {
   const [wk, setWk] = useState(0);
   const [day, setDay] = useState(0);
   const [swaps, setSwaps] = useState({});
+  const [theme, setTheme] = useState(() => {
+    try {
+      const saved = localStorage.getItem('tk-theme');
+      if (saved === 'dark' || saved === 'light') return saved;
+      return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    } catch (e) { return 'light'; }
+  });
   const set = (patch) => setProfile((s) => ({ ...s, ...patch }));
   const build = (p) => { const prof = p || profile; setPlan(buildPlan(prof)); setWk(0); setDay(0); setSwaps({}); };
   const variant = () => { const prof = { ...profile, seed: (profile.seed || 0) + 1 }; setProfile(prof); setPlan(buildPlan(prof)); setSwaps({}); };
@@ -1235,6 +1274,9 @@ export default function TrainingConstructor() {
       try { await storage.set('tk-state', JSON.stringify({ profile, anchors, swaps, built: !!plan })); } catch (e) {}
     })();
   }, [profile, anchors, swaps, plan, loaded]);
+  useEffect(() => {
+    try { localStorage.setItem('tk-theme', theme); } catch (e) {}
+  }, [theme]);
   const reset = async () => { try { await storage.delete('tk-state'); } catch (e) {} setAnchors({}); setSwaps({}); setPlan(null); };
 
   const view = useMemo(() => {
@@ -1293,8 +1335,8 @@ export default function TrainingConstructor() {
 
   if (!plan || !view) {
     return (
-      <div className="tk"><style>{CSS}</style>
-        <div className="tk-bar"><span className="tk-mark">Конструктор тренувань</span><span className="tk-sub">Макроцикл · RIR за SFR · делоад</span></div>
+      <div className="tk" data-theme={theme}><style>{CSS}</style>
+        <Header theme={theme} onToggle={() => setTheme((t) => t === 'dark' ? 'light' : 'dark')} />
         <div className="tk-main"><Wizard p={profile} set={set} onBuild={build} /></div>
       </div>
     );
@@ -1325,9 +1367,9 @@ export default function TrainingConstructor() {
   };
 
   return (
-    <div className="tk">
+    <div className="tk" data-theme={theme}>
       <style>{CSS}</style>
-      <div className="tk-bar"><span className="tk-mark">Конструктор тренувань</span><span className="tk-sub">Макроцикл · RIR за SFR · делоад</span></div>
+      <Header theme={theme} onToggle={() => setTheme((t) => t === 'dark' ? 'light' : 'dark')} />
       <div className="tk-main">
         <div className="tk-card">
           <div className="tk-chips">
