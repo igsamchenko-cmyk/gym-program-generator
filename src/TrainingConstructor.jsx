@@ -458,9 +458,14 @@ function customSlots(groups, p) {
     const t = alloc.filter((x) => x.n < GROUP_CAP[x.g]).sort((a, b) => GROUP_WEIGHT[b.g] / b.n - GROUP_WEIGHT[a.g] / a.n)[0];
     t.n += 1; sum += 1;
   }
-  const out = [];
-  alloc.forEach(({ g, n }) => { for (let i = 0; i < n; i++) out.push(GROUP_SLOTS[g][i % GROUP_SLOTS[g].length]); });
-  return out;
+  const required = [], extras = [];
+  alloc.forEach(({ g, n }) => {
+    for (let i = 0; i < n; i++) {
+      const slot = { spec: GROUP_SLOTS[g][i % GROUP_SLOTS[g].length], group: g };
+      (i === 0 ? required : extras).push(slot);
+    }
+  });
+  return required.concat(extras);
 }
 const dayLabel = (groups) => groups.map((g) => MUSCLE[g]).join(' + ') || 'День без груп';
 
@@ -570,7 +575,30 @@ function isExerciseAllowed(ex, p) {
   return true;
 }
 
-const slotPattern = (spec) => spec.split('@')[0].split('!')[0];
+const slotSpec = (slot) => typeof slot === 'string' ? slot : slot.spec;
+const slotGroup = (slot) => typeof slot === 'string' ? null : slot.group;
+const slotPattern = (slot) => slotSpec(slot).split('@')[0].split('!')[0];
+const exerciseCoversGroup = (ex, group) => ex.m === group || (ex.s || []).includes(group);
+
+function missingRequestedGroups(day, items = day.items) {
+  const requested = day.requestedGroups || [];
+  return requested.filter((group) => !items.some((item) => exerciseCoversGroup(item.ex, group)));
+}
+
+function removalPreservesGroups(day, index) {
+  if (!(day.requestedGroups || []).length) return true;
+  const currentMissing = new Set(missingRequestedGroups(day));
+  const nextMissing = missingRequestedGroups(day, day.items.filter((_, i) => i !== index));
+  return nextMissing.every((group) => currentMissing.has(group));
+}
+
+function replacementPreservesGroups(plan, dayIndex, itemIndex, candidate) {
+  const day = plan && plan.days && plan.days[dayIndex];
+  if (!day) return false;
+  const currentMissing = new Set(missingRequestedGroups(day));
+  const items = day.items.map((item, i) => i === itemIndex ? { ...item, ex: candidate } : item);
+  return missingRequestedGroups(day, items).every((group) => currentMissing.has(group));
+}
 
 function balancedSlots(full, count, dayIndex, seed) {
   if (count >= full.length) return full.slice();
@@ -679,12 +707,34 @@ function buildPlan(pRaw) {
     return pool[(counter++ + counterSeed) % pool.length];
   };
 
+  const pickRequested = (slot, group, usedDay) => {
+    const specs = [...new Set([slotSpec(slot), ...(GROUP_SLOTS[group] || [])])];
+    for (const spec of specs) {
+      const ex = pick(spec, usedDay);
+      if (ex && exerciseCoversGroup(ex, group)) return ex;
+    }
+
+    const preferredPatterns = new Map((GROUP_SLOTS[group] || []).map((spec, i) => [slotPattern(spec), i]));
+    const pool = EX.filter((ex) => !usedDay.has(ex.id) && exerciseCoversGroup(ex, group) && isExerciseAllowed(ex, p));
+    if (!pool.length) return null;
+    const score = (ex) => (ex.m === group ? 0 : 20)
+      + (preferredPatterns.has(ex.p) ? preferredPatterns.get(ex.p) : 10)
+      + (usedWeek.has(ex.id) ? 3 : 0)
+      + ((combo[ex.p + ':' + ex.rg] || 0) * 2);
+    const bestScore = Math.min(...pool.map(score));
+    const best = pool.filter((ex) => score(ex) === bestScore).sort((a, b) => a.id.localeCompare(b.id));
+    reasonBuf = ['власна розкладка: рух гарантовано зберігає обрану групу «' + MUSCLE[group] + '»'];
+    return best[(counter++ + counterSeed) % best.length];
+  };
+
   const boostLeft = {}, boostUsed = {};
   p.priority.forEach((m) => { boostLeft[m] = p.days >= 5 ? 1 : 2; });
 
   const defs = p.mode === 'custom'
-    ? p.customDays.slice(0, p.days).map((d) => ({ type: 'custom', name: d.name || dayLabel(d.groups), full: customSlots(d.groups, p) }))
-    : SPLITS[p.days].map((t) => ({ type: t, name: DAY_NAME[t], full: DAY_SLOTS[t] }));
+    ? p.customDays.slice(0, p.days).map((d) => ({
+        type: 'custom', name: d.name || dayLabel(d.groups), full: customSlots(d.groups, p), requestedGroups: d.groups.slice(),
+      }))
+    : SPLITS[p.days].map((t) => ({ type: t, name: DAY_NAME[t], full: DAY_SLOTS[t], requestedGroups: [] }));
   const selectedSlots = defs.map((def, dayIndex) => def.type === 'custom'
     ? def.full.slice()
     : balancedSlots(def.full, slotCount(p.level, def.type, p.days), dayIndex, p.seed));
@@ -694,41 +744,53 @@ function buildPlan(pRaw) {
     ensureWeeklySlot(selectedSlots, defs, 'core', protectedPatterns);
   }
 
-  const days = defs.map(({ type, name, full }, dayIndex) => {
+  const days = defs.map(({ type, name, full, requestedGroups }, dayIndex) => {
     let slots = selectedSlots[dayIndex].slice();
     p.priority.forEach((mus) => {
       const list = PRIORITY_PATTERN[mus];
       const pat = list[(boostUsed[mus] || 0) % list.length];
-      const base = pat.split('@')[0];
-      const already = slots.filter((sl) => {
-        const b = sl.split('@')[0].split('!')[0];
-        return (PRIORITY_PATTERN[mus] || []).some((x) => x.split('@')[0] === b);
+      const base = slotPattern(pat);
+      const already = slots.filter((slot) => {
+        const pattern = slotPattern(slot);
+        return (PRIORITY_PATTERN[mus] || []).some((candidate) => slotPattern(candidate) === pattern);
       }).length;
-      if (full.some((s) => s.split('@')[0].split('!')[0] === base) && boostLeft[mus] > 0 && slots.length < 10 && already < (GROUP_CAP[mus] || 3)) {
+      if (full.some((slot) => slotPattern(slot) === base) && boostLeft[mus] > 0 && slots.length < 10 && already < (GROUP_CAP[mus] || 3)) {
         slots.push(pat); boostLeft[mus] -= 1; boostUsed[mus] = (boostUsed[mus] || 0) + 1;
       }
     });
     const usedDay = new Set();
     combo = {};
     let items = [];
-    slots.forEach((spec) => {
-      const ex = pick(spec, usedDay);
+    slots.forEach((slot) => {
+      const spec = slotSpec(slot);
+      const requestedGroup = slotGroup(slot);
+      const alreadyCovered = requestedGroup && items.some((item) => exerciseCoversGroup(item.ex, requestedGroup));
+      const ex = requestedGroup && !alreadyCovered ? pickRequested(slot, requestedGroup, usedDay) : pick(spec, usedDay);
       if (!ex) return;
       usedDay.add(ex.id); usedWeek.add(ex.id);
       combo[ex.p + ':' + ex.rg] = (combo[ex.p + ':' + ex.rg] || 0) + 1;
-      items.push({ ex, base: baseSets(p.level, p.days, ex.t), boost: p.priority.includes(ex.m), why: reasonBuf.slice() });
+      items.push({
+        ex, base: baseSets(p.level, p.days, ex.t), boost: p.priority.includes(ex.m),
+        why: reasonBuf.slice(), requestedGroup,
+      });
     });
 
-    // якщо частину слотів довелося зняти (вичерпаний інвентар), добираємо з патернів цього ж дня
+    // Якщо частину додаткових слотів довелося зняти, добираємо з патернів цього ж дня.
     const want = slots.length;
     if (items.length < want) {
-      for (const spec of full.concat(full)) {
+      for (const slot of full.concat(full)) {
         if (items.length >= want) break;
-        const ex = pick(spec, usedDay);
+        const spec = slotSpec(slot);
+        const requestedGroup = slotGroup(slot);
+        const alreadyCovered = requestedGroup && items.some((item) => exerciseCoversGroup(item.ex, requestedGroup));
+        const ex = requestedGroup && !alreadyCovered ? pickRequested(slot, requestedGroup, usedDay) : pick(spec, usedDay);
         if (!ex) continue;
         usedDay.add(ex.id); usedWeek.add(ex.id);
         combo[ex.p + ':' + ex.rg] = (combo[ex.p + ':' + ex.rg] || 0) + 1;
-        items.push({ ex, base: baseSets(p.level, p.days, ex.t), boost: p.priority.includes(ex.m), why: reasonBuf.slice() });
+        items.push({
+          ex, base: baseSets(p.level, p.days, ex.t), boost: p.priority.includes(ex.m),
+          why: reasonBuf.slice(), requestedGroup,
+        });
       }
     }
     // впорядкування: важке й пріоритетне на свіжу → база → ізоляція → литки → кор
@@ -758,28 +820,31 @@ function buildPlan(pRaw) {
       if (it.ex.t === 'iso') w.push('ізоляція: сюди винесена дешева втома, тому RIR тут нижчий, ніж у базових рухах');
       if (LAST_IN_DAY[it.ex.p]) w.push('у кінець сесії — щоб не забирати стабілізацію в базових рухів');
     });
-    return markHeavy({ type, name, items });
+    const day = markHeavy({ type, name, items, requestedGroups });
+    day.missingGroups = missingRequestedGroups(day);
+    return day;
   });
 
   const plan = { profile: p, flags: fl, weeks: MACRO[p.level], days };
 
-  // Ліміт часу: спершу зменшуємо дешевий обсяг, потім вправи, але ніколи не лишаємо менше трьох рухів.
+  // Ліміт часу: зменшуємо обсяг і допоміжні вправи, але зберігаємо хоча б одне покриття кожної обраної групи.
   if (p.timeCap) {
     const peak = plan.weeks.reduce((a, b) => (a.mult > b.mult ? a : b));
     plan.days.forEach((d, di) => {
       let guard = 0, trimmed = 0;
+      const lastRemovable = (predicate) => {
+        for (let i = d.items.length - 1; i >= 0; i--) {
+          if (predicate(d.items[i]) && removalPreservesGroups(d, i)) return i;
+        }
+        return -1;
+      };
       while (sessionMinutes(d, peak, plan, di) > p.timeCap && guard++ < 60) {
         const isoSet = [...d.items].reverse().find((it) => it.ex.t === 'iso' && it.base > 1);
         if (isoSet) { isoSet.base -= 1; trimmed++; continue; }
 
         if (d.items.length > 3) {
-          let cutAt = -1;
-          for (let i = d.items.length - 1; i >= 0; i--) {
-            if (d.items[i].ex.t === 'iso' && !p.priority.includes(d.items[i].ex.m)) { cutAt = i; break; }
-          }
-          if (cutAt < 0) {
-            for (let i = d.items.length - 1; i >= 0; i--) if (d.items[i].ex.t === 'iso') { cutAt = i; break; }
-          }
+          let cutAt = lastRemovable((it) => it.ex.t === 'iso' && !p.priority.includes(it.ex.m));
+          if (cutAt < 0) cutAt = lastRemovable((it) => it.ex.t === 'iso');
           if (cutAt >= 0) {
             d.items.splice(cutAt, 1); markHeavy(d); trimmed++; continue;
           }
@@ -789,17 +854,18 @@ function buildPlan(pRaw) {
         if (compSet) { compSet.base -= 1; trimmed++; continue; }
 
         if (d.items.length > 3) {
-          let cutAt = -1;
-          for (let i = d.items.length - 1; i >= 0; i--) {
-            if (!p.priority.includes(d.items[i].ex.m)) { cutAt = i; break; }
+          let cutAt = lastRemovable((it) => !p.priority.includes(it.ex.m));
+          if (cutAt < 0) cutAt = lastRemovable(() => true);
+          if (cutAt >= 0) {
+            d.items.splice(cutAt, 1); markHeavy(d); trimmed++; continue;
           }
-          if (cutAt < 0) cutAt = d.items.length - 1;
-          d.items.splice(cutAt, 1); markHeavy(d); trimmed++; continue;
         }
         break;
       }
       d.trimmed = trimmed;
-      d.overCap = sessionMinutes(d, peak, plan, di) > p.timeCap;
+      d.capRequiredMinutes = sessionMinutes(d, peak, plan, di);
+      d.overCap = d.capRequiredMinutes > p.timeCap;
+      d.missingGroups = missingRequestedGroups(d);
     });
   }
   return plan;
@@ -1215,13 +1281,14 @@ function Wizard({ p, set, onBuild }) {
   );
 }
 
-function ExRow({ item, idx, week, plan, heavy, tech, onSwap, anchors, onAnchor }) {
+function ExRow({ item, idx, dayIndex, week, plan, heavy, tech, onSwap, anchors, onAnchor }) {
   const [open, setOpen] = useState(false);
   const [swap, setSwap] = useState(false);
   const [why, setWhy] = useState(false);
   const p = plan.profile;
   const sets = setsFor(item, week, plan, heavy);
-  const alts = EX.filter((e) => e.p === item.ex.p && e.id !== item.ex.id && isExerciseAllowed(e, p));
+  const alts = EX.filter((e) => e.p === item.ex.p && e.id !== item.ex.id
+    && isExerciseAllowed(e, p) && replacementPreservesGroups(plan, dayIndex, idx, e));
   const tempo = tempoFor(item, week, heavy);
 
   return (
@@ -1395,13 +1462,22 @@ function sanitizeAnchors(raw) {
 function sanitizeSwaps(raw, plan) {
   if (!plan || !raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
   const out = {};
+  const workingPlan = {
+    ...plan,
+    days: plan.days.map((day) => ({ ...day, items: day.items.map((item) => ({ ...item })) })),
+  };
   Object.entries(raw).forEach(([key, value]) => {
     if (!/^\d+:\d+$/.test(key)) return;
     const [di, si] = key.split(':').map(Number);
-    const original = plan.days[di] && plan.days[di].items[si] && plan.days[di].items[si].ex;
+    const item = workingPlan.days[di] && workingPlan.days[di].items[si];
+    const original = item && item.ex;
     const id = typeof value === 'string' ? value : value && value.id;
     const candidate = EX_BY_ID.get(id);
-    if (original && candidate && candidate.id !== original.id && candidate.p === original.p && isExerciseAllowed(candidate, plan.profile)) out[key] = candidate.id;
+    if (original && candidate && candidate.id !== original.id && candidate.p === original.p
+      && isExerciseAllowed(candidate, plan.profile) && replacementPreservesGroups(workingPlan, di, si, candidate)) {
+      out[key] = candidate.id;
+      workingPlan.days[di].items[si] = { ...item, ex: candidate };
+    }
   });
   return out;
 }
@@ -1602,7 +1678,12 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
   const marks = techMarks(view.days[day], week, view);
   const warm = warmup(view, view.days[day]);
   const alerts = scheduleWarnings(view);
-  const mins = sessionMinutes(view.days[day], week, view, day);
+  const currentDay = view.days[day];
+  const mins = sessionMinutes(currentDay, week, view, day);
+  const missingGroupLabels = (currentDay.missingGroups || []).map((group) => MUSCLE[group]);
+  const capRequiredMinutes = currentDay.capRequiredMinutes || mins;
+  const suggestedCap = [45, 60, 75, 90].find((cap) => cap >= capRequiredMinutes && cap > (profile.timeCap || 0));
+  const capSuggestion = suggestedCap ? suggestedCap + ' хв' : 'режим «Без ліміту»';
   const dayLabelFor = (i) => (profile.weekdays.length === profile.days ? WEEKDAYS[profile.weekdays[i]] + ' · ' : (i + 1) + '. ');
 
   const copy = async () => {
@@ -1684,10 +1765,25 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
             ))}
           </div>
           <div className="tk-meta">
-            ~{mins} хв разом із розминкою · {view.days[day].items.length} вправ
-            {view.days[day].trimmed ? ' · сесію скорочено під ліміт ' + profile.timeCap + ' хв' : ''}
-            {view.days[day].overCap ? ' · у ліміт не вкладається навіть після скорочення — лишились самі базові рухи' : ''}
+            ~{mins} хв разом із розминкою · {currentDay.items.length} вправ
+            {currentDay.trimmed && !currentDay.overCap ? ' · сесію скорочено під ліміт ' + profile.timeCap + ' хв' : ''}
+            {currentDay.trimmed && currentDay.overCap ? ' · сесію максимально скорочено без втрати обраних груп' : ''}
+            {currentDay.overCap && profile.mode !== 'custom' ? ' · у ліміт не вкладається навіть після скорочення' : ''}
           </div>
+          {missingGroupLabels.length > 0 && (
+            <div className="tk-alert" style={{ marginTop: -4 }}>
+              <b>Не всі обрані групи можна покрити</b>
+              Для груп «{missingGroupLabels.join(', ')}» не знайдено безпечної унікальної вправи з поточним інвентарем та обмеженнями.
+              Зміни інвентар або прибери одне з обмежень лише якщо це справді безпечно для тебе.
+            </div>
+          )}
+          {currentDay.overCap && profile.mode === 'custom' && (
+            <div className="tk-alert" style={{ marginTop: -4 }}>
+              <b>Ліміт часу конфліктує з власною розкладкою</b>
+              Щоб зберегти всі {currentDay.requestedGroups.length} обраних груп, на піковому тижні цьому дню потрібно приблизно {capRequiredMinutes} хв — на {capRequiredMinutes - profile.timeCap} хв більше за ліміт.
+              Обери {capSuggestion} або прибери щонайменше одну групу з цього дня.
+            </div>
+          )}
           {!profile.timeCap && mins > 100 && (
             <div className="tk-alert" style={{ marginTop: -4 }}>
               <b>Довга сесія</b>{mins} хв — це та зона, де якість останніх вправ падає швидше, ніж накопичується стимул. Постав ліміт часу в параметрах або рознеси день на два.
@@ -1698,7 +1794,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
             <ul>{warm.map((w, i) => <li key={i}>{w}</li>)}</ul>
           </div>
           {view.days[day].items.map((it, i) => (
-            <ExRow key={i} item={it} idx={i} week={week} plan={view}
+            <ExRow key={i} item={it} idx={i} dayIndex={day} week={week} plan={view}
               heavy={isHeavy(day, i, week, view)} tech={marks.has(i)}
               anchors={anchors} onAnchor={(id, v) => setAnchors((a) => ({ ...a, [id]: v ? Number(v) : 0 }))}
               onSwap={(ex) => setSwaps((s) => ({ ...s, [day + ':' + i]: ex.id }))} />

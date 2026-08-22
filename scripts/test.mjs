@@ -92,6 +92,78 @@ try {
   check(overCapDays / cappedDays < 0.03, '45-minute cap miss rate too high: ' + overCapDays + '/' + cappedDays);
   check(maxOver <= 8, 'A capped session exceeds the limit by too much: ' + maxOver + ' min');
 
+  const covers = (day, group) => day.items.some((item) => item.ex.m === group || (item.ex.s || []).includes(group));
+  let customPlans = 0;
+  for (const place of places) for (const level of levels) for (const days of [2, 4, 6]) {
+    for (let seed = 0; seed < 12; seed++) {
+      const customDays = Array.from({ length: days }, (_, di) => {
+        const count = 1 + ((seed + di) % 6);
+        return { groups: Array.from({ length: count }, (_, gi) => Object.keys(MUSCLE)[(seed + di + gi) % Object.keys(MUSCLE).length]) };
+      });
+      for (const timeCap of [null, 45]) {
+        const profile = sanitizeProfile({
+          ...DEFAULT_PROFILE, age: 14 + ((seed * 7) % 57), level, days, mode: 'custom',
+          customDays, place, limits: seed % 3 === 0 ? ['knee', 'lowback', 'shoulder'] : [], timeCap, seed,
+        });
+        const plan = buildPlan(profile);
+        const peak = plan.weeks.reduce((a, b) => a.mult > b.mult ? a : b);
+        plan.days.forEach((day, di) => {
+          const missing = profile.customDays[di].groups.filter((group) => !covers(day, group));
+          check(missing.length === 0, 'Custom day silently omitted: ' + missing.join(','));
+          check((day.missingGroups || []).length === 0, 'Custom missingGroups must be empty');
+          if (timeCap) equal(day.overCap, sessionMinutes(day, peak, plan, di) > timeCap, 'Custom over-cap flag is exact');
+        });
+        customPlans++;
+      }
+    }
+  }
+
+  const formerlyFailingProfile = sanitizeProfile({
+    ...DEFAULT_PROFILE, age: 67, level: 'int', days: 6, mode: 'custom', place: 'bw', bar: false,
+    goal: 'fatloss', limits: ['knee', 'lowback'], timeCap: 90, seed: 330077,
+    customDays: [
+      { groups: ['core', 'glutes', 'chest'] }, { groups: ['triceps', 'calves'] },
+      { groups: ['hams', 'biceps', 'chest'] }, { groups: ['core', 'glutes', 'hams', 'back', 'delts'] },
+      { groups: ['biceps', 'quads', 'core', 'back', 'chest'] },
+      { groups: ['delts', 'calves', 'chest', 'quads', 'hams', 'biceps'] },
+    ],
+  });
+  const formerlyFailingPlan = buildPlan(formerlyFailingProfile);
+  formerlyFailingPlan.days.forEach((day, di) => {
+    const missing = formerlyFailingProfile.customDays[di].groups.filter((group) => !covers(day, group));
+    check(missing.length === 0, 'Previously failing bodyweight profile must preserve every group');
+  });
+
+  const timeConflictProfile = sanitizeProfile({
+    ...DEFAULT_PROFILE, age: 66, sex: 'x', level: 'int', days: 5, mode: 'custom',
+    place: 'band', bar: true, goal: 'strength', priority: ['core', 'calves'],
+    limits: [], weekdays: [0, 2, 3, 5, 6], timeCap: 45, fatigue: false, seed: 667743,
+    customDays: [
+      { groups: ['calves', 'quads', 'hams', 'core', 'glutes'] },
+      { groups: ['glutes', 'core'] }, { groups: ['triceps', 'biceps'] },
+      { groups: ['core', 'quads', 'biceps', 'chest', 'delts', 'calves'] },
+      { groups: ['biceps'] },
+    ],
+  });
+  const timeConflictPlan = buildPlan(timeConflictProfile);
+  check(timeConflictPlan.days.every((day) => day.missingGroups.length === 0), 'Time conflict must preserve every selected group');
+  check(timeConflictPlan.days.some((day) => day.overCap), 'Impossible 45-minute custom day must be reported as over cap');
+
+  const aggressiveSwaps = {};
+  timeConflictPlan.days.forEach((day, di) => day.items.forEach((item, si) => {
+    const candidate = EX.find((ex) => ex.p === item.ex.p && ex.id !== item.ex.id && isExerciseAllowed(ex, timeConflictProfile));
+    if (candidate) aggressiveSwaps[di + ':' + si] = candidate.id;
+  }));
+  const safeAggressiveSwaps = sanitizeSwaps(aggressiveSwaps, timeConflictPlan);
+  timeConflictPlan.days.forEach((day, di) => {
+    const swappedItems = day.items.map((item, si) => {
+      const replacement = EX.find((ex) => ex.id === safeAggressiveSwaps[di + ':' + si]);
+      return replacement ? { ...item, ex: replacement } : item;
+    });
+    const swappedDay = { ...day, items: swappedItems };
+    check(day.requestedGroups.every((group) => covers(swappedDay, group)), 'Combined saved swaps must preserve every selected group');
+  });
+
   const sample = buildPlan(sanitizeProfile({ ...DEFAULT_PROFILE, age: 55, limits: ['shoulder'], seed: 3 }));
   const first = sample.days[0].items[0].ex;
   const goodSwap = EX.find((ex) => ex.p === first.p && ex.id !== first.id && isExerciseAllowed(ex, sample.profile));
@@ -149,6 +221,16 @@ try {
   check(!JSON.stringify(renderer.toJSON()).includes('NaN'), 'Corrupt state never renders NaN');
   renderer.unmount();
 
+  store = new Map([['tk-state', JSON.stringify({
+    version: 2, profile: timeConflictProfile, built: true, swaps: {}, anchors: {},
+  })]]);
+  await act(async () => { renderer = TestRenderer.create(React.createElement(App)); await flush(); });
+  const conflictDays = renderer.root.findAll((node) => node.type === 'button' && node.props.className === 'tk-day');
+  await act(async () => { conflictDays[3].props.onClick(); await flush(); });
+  check(JSON.stringify(renderer.toJSON()).includes('Ліміт часу конфліктує з власною розкладкою'), 'Custom time conflict warning is rendered');
+  check(JSON.stringify(renderer.toJSON()).includes('60 хв'), 'Custom time conflict suggests the next viable cap');
+  renderer.unmount();
+
   const ExcelJS = (await import('exceljs/dist/exceljs.min.js')).default;
   const wb = new ExcelJS.Workbook();
   wb.addWorksheet('Тест').addRow(['Вправа', 'Підходи']);
@@ -157,7 +239,7 @@ try {
   await roundTrip.xlsx.load(buffer);
   equal(roundTrip.getWorksheet('Тест').getCell('A1').value, 'Вправа', 'Excel workbook round-trip succeeds');
 
-  console.log('OK: ' + checks + ' assertions, ' + plansBuilt + ' profile combinations, ' + cappedDays + ' capped days, ' + overCapDays + ' over cap.');
+  console.log('OK: ' + checks + ' assertions, ' + plansBuilt + ' auto profiles, ' + customPlans + ' custom profiles, ' + cappedDays + ' capped days, ' + overCapDays + ' auto days over cap.');
 } finally {
   await server.close();
 }
