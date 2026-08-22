@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect, Component } from "react";
-import ExcelJS from "exceljs/dist/exceljs.min.js";
+import { useState, useMemo, useEffect, useRef, Component } from "react";
+
 
 /* Автономне сховище: той самий контракт {get,set,delete}, що й window.storage
    у середовищі Claude-артефактів, але на звичайному localStorage браузера.
@@ -20,7 +20,7 @@ const storage = {
 };
 
 /* ============================================================
-   БАЗА ВПРАВ — 94 рухи, 18 підспецифікацій
+   БАЗА ВПРАВ — 98 рухів, 18 підспецифікацій
    rg — підспецифікація · tp — темп · sd — вимога до стабілізаторів
    tech — придатність для інтенсивних технік · video — слот під медіатеку
    ============================================================ */
@@ -144,7 +144,7 @@ const EX = [
   { id: 'glute_bridge', rg: 'glute', tp: '2-1-2', sd: 0, tech: 1, n: 'Сідничний міст вагою тіла', p: 'hinge', m: 'glutes', s: ['hams'], eq: 'bodyweight', t: 'comp', d: 1, st: 0,
     cue: 'Лежиш на спині, стопи біля таза. Піднімаєш таз, стискаючи сідниці, і тримаєш секунду вгорі.',
     err: 'Штовхання носками, прогин у попереку.', video: '' },
-  { id: 'hyperext', rg: 'erect', tp: '2-1-2', sd: 1, tech: 1, n: 'Гіперекстензія', p: 'hinge', m: 'hams', s: ['glutes', 'back'], eq: 'machine', t: 'iso', d: 1, st: 1,
+  { id: 'hyperext', rg: 'ham', tp: '2-1-2', sd: 1, tech: 1, n: 'Гіперекстензія', p: 'hinge', m: 'hams', s: ['glutes', 'back'], eq: 'machine', t: 'iso', d: 1, st: 1,
     cue: 'Валики трохи нижче за таз. Рух — згинання в кульшовому, а не в попереку. Зупиняєшся на прямій лінії.',
     err: 'Перерозгинання назад у верхній точці.', video: '' },
   { id: 'band_gm', rg: 'ham', tp: '3-0-2', sd: 1, tech: 0, n: 'Гуд-морнінг з резинкою', p: 'hinge', m: 'hams', s: ['glutes'], eq: 'band', t: 'comp', d: 2, st: 1, av: ['lowback'],
@@ -368,8 +368,9 @@ const REGION = {
 const REGION_GROUP = {
   chest_up: 'chest', chest_mid: 'chest', back_width: 'back', back_thick: 'back', back_low: 'back', erect: 'back',
   delt_front: 'delts', delt_side: 'delts', delt_rear: 'delts', bi: 'biceps', tri: 'triceps', tri_long: 'triceps',
-  quad: 'quads', ham: 'hams', glute: 'glutes', calf_gastro: 'calves', calf_soleus: 'calves', core: 'core', cuff: 'cuff',
+  quad: 'quads', ham: 'hams', glute: 'glutes', calf_gastro: 'calves', calf_soleus: 'calves', core: 'core', cuff: 'delts',
 };
+const EX_BY_ID = new Map(EX.map((ex) => [ex.id, ex]));
 const MUSCLE = { chest: 'Груди', back: 'Спина', quads: 'Квадрицепс', hams: 'Задня поверхня стегна', glutes: 'Сідничні', delts: 'Дельти', biceps: 'Біцепс', triceps: 'Трицепс', calves: 'Литки', core: 'Прес / кор' };
 
 const EQUIP_SETS = {
@@ -409,7 +410,7 @@ const DAY_SLOTS = {
 const DAY_NAME = { fbA: 'Фулбоді A', fbB: 'Фулбоді B', fbC: 'Фулбоді C', upper: 'Верх тіла', lower: 'Низ тіла', push: 'Жимовий', pull: 'Тяговий', legs: 'Ноги' };
 const SPLITS = { 2: ['fbA', 'fbB'], 3: ['fbA', 'fbB', 'fbC'], 4: ['upper', 'lower', 'upper', 'lower'], 5: ['upper', 'lower', 'push', 'pull', 'legs'], 6: ['push', 'pull', 'legs', 'push', 'pull', 'legs'] };
 const SPLIT_NOTE = {
-  2: 'Два фулбоді-дні: кожна група працює двічі на тиждень — мінімум, який ще дає прогрес.',
+  2: 'Два фулбоді-дні: основні рухи повторюються двічі, а менші групи розподіляються між днями й частково працюють як синергісти.',
   3: 'Три фулбоді з різними акцентами. Робоча схема на будь-якому стажі, якщо обсяг рознесено рівно по днях.',
   4: 'Верх / низ двічі. Найкращий баланс частоти й обсягу для середнього рівня.',
   5: 'Верх і низ на початку тижня, далі жим / тяга / ноги.',
@@ -547,6 +548,61 @@ function ageFlags(age) {
   };
 }
 
+function isExerciseAllowed(ex, p) {
+  if (!ex || !p) return false;
+  const allowed = new Set(EQUIP_SETS[p.place] || EQUIP_SETS.gym);
+  if (p.bar) allowed.add('pullupbar');
+  const fl = ageFlags(p.age);
+  const maxDiff = fl.teen ? 2 : p.level === 'beg' ? 2 : 3;
+  const basic = (candidate) => allowed.has(candidate.eq)
+    && candidate.d <= maxDiff
+    && !(candidate.av || []).some((area) => p.limits.includes(area));
+  if (!basic(ex)) return false;
+  if (fl.axialCap && AXIAL_HEAVY.has(ex.id)) {
+    const safer = EX.some((candidate) => candidate.p === ex.p && basic(candidate) && !AXIAL_HEAVY.has(candidate.id));
+    if (safer) return false;
+  }
+  if (fl.jointCare && DEMANDING.has(ex.id)) {
+    const safer = EX.some((candidate) => candidate.p === ex.p && basic(candidate)
+      && (!fl.axialCap || !AXIAL_HEAVY.has(candidate.id)) && !DEMANDING.has(candidate.id));
+    if (safer) return false;
+  }
+  return true;
+}
+
+const slotPattern = (spec) => spec.split('@')[0].split('!')[0];
+
+function balancedSlots(full, count, dayIndex, seed) {
+  if (count >= full.length) return full.slice();
+  const foundation = Math.min(3, count);
+  const result = full.slice(0, foundation);
+  const extras = full.slice(foundation);
+  const need = count - foundation;
+  if (need <= 0 || !extras.length) return result;
+  const offset = Math.abs((seed || 0) + dayIndex) % extras.length;
+  for (let i = 0; i < need; i++) {
+    let idx = (Math.floor(((i + 0.5) * extras.length) / need) + offset) % extras.length;
+    while (result.includes(extras[idx])) idx = (idx + 1) % extras.length;
+    result.push(extras[idx]);
+  }
+  return result;
+}
+
+function ensureWeeklySlot(selected, defs, pattern, protectedPatterns) {
+  if (selected.some((slots) => slots.some((spec) => slotPattern(spec) === pattern))) return;
+  const dayIndex = defs.findIndex((def) => def.full.some((spec) => slotPattern(spec) === pattern));
+  if (dayIndex < 0) return;
+  const wanted = defs[dayIndex].full.find((spec) => slotPattern(spec) === pattern);
+  const slots = selected[dayIndex];
+  let replaceAt = -1;
+  for (let i = slots.length - 1; i >= 3; i--) {
+    const current = slotPattern(slots[i]);
+    if (current !== 'calves' && current !== 'core' && !protectedPatterns.has(current)) { replaceAt = i; break; }
+  }
+  if (replaceAt >= 0) slots[replaceAt] = wanted;
+  else if (slots.length < defs[dayIndex].full.length) slots.push(wanted);
+}
+
 /* ============================================================
    ГЕНЕРАТОР
    ============================================================ */
@@ -580,15 +636,8 @@ function markHeavy(day) {
 }
 
 function buildPlan(pRaw) {
-  // Незалежно від того, звідки прийшов профіль (форма, localStorage старої версії,
-  // ручний виклик) — масивні поля мають бути масивами, інакше нижче все впаде.
-  const p = {
-    ...pRaw,
-    priority: Array.isArray(pRaw.priority) ? pRaw.priority : [],
-    limits: Array.isArray(pRaw.limits) ? pRaw.limits : [],
-    customDays: Array.isArray(pRaw.customDays) ? pRaw.customDays : [],
-    weekdays: Array.isArray(pRaw.weekdays) ? pRaw.weekdays : [],
-  };
+  const p = sanitizeProfile(pRaw);
+  if (!isProfileBuildable(p)) throw new Error('У власній розкладці кожен тренувальний день має містити хоча б одну групу м’язів');
   const allowed = new Set(EQUIP_SETS[p.place] || EQUIP_SETS.gym);
   if (p.bar) allowed.add('pullupbar');
   const fl = ageFlags(p.age);
@@ -612,13 +661,13 @@ function buildPlan(pRaw) {
       if (pool.length < before) why.push('обмеження (' + p.limits.map((l) => LIMIT_LABEL[l]).join(', ') + '): рухи з ризиком для цієї зони виключені');
     }
     if (fl.axialCap) cut((e) => !AXIAL_HEAVY.has(e.id), 'вік ' + p.age + ': осьова компресія хребта зрізана');
-    if (!pool.length) { const fb = FALLBACK[pattern]; return fb && depth < 2 ? pick(fb + (wantType ? '!' + wantType : ''), usedDay, depth + 1) : null; }
-    if (wantRg) cut((e) => e.rg === wantRg, 'слот націлений на підспецифікацію «' + REGION[wantRg] + '»');
-    if (wantType) cut((e) => e.t === wantType, null);
     if (fl.jointCare) {
       cut((e) => !DEMANDING.has(e.id), 'вік ' + p.age + ': вимогливий для суглоба варіант замінено на щадніший');
       if (pool.every((e) => e.t === 'iso')) cut((e) => JOINT_FRIENDLY.has(e.id), null);
     }
+    if (!pool.length) { const fb = FALLBACK[pattern]; return fb && depth < 2 ? pick(fb + (wantType ? '!' + wantType : ''), usedDay, depth + 1) : null; }
+    if (wantRg) cut((e) => e.rg === wantRg, 'слот націлений на підспецифікацію «' + REGION[wantRg] + '»');
+    if (wantType) cut((e) => e.t === wantType, null);
     if (p.place === 'gym' && p.level !== 'beg' && !['core', 'calves'].includes(pattern)) cut((e) => e.eq !== 'bodyweight' && e.eq !== 'band', null);
     const fd = pool.filter((e) => !usedDay.has(e.id) && (combo[e.p + ':' + e.rg] || 0) < 2);
     if (!fd.length) { const fb = FALLBACK[pattern]; return fb && depth < 2 ? pick(fb, usedDay, depth + 1) : null; }
@@ -634,11 +683,19 @@ function buildPlan(pRaw) {
   p.priority.forEach((m) => { boostLeft[m] = p.days >= 5 ? 1 : 2; });
 
   const defs = p.mode === 'custom'
-    ? (p.customDays || []).slice(0, p.days).map((d) => ({ type: 'custom', name: d.name || dayLabel(d.groups), full: customSlots(d.groups, p) }))
+    ? p.customDays.slice(0, p.days).map((d) => ({ type: 'custom', name: d.name || dayLabel(d.groups), full: customSlots(d.groups, p) }))
     : SPLITS[p.days].map((t) => ({ type: t, name: DAY_NAME[t], full: DAY_SLOTS[t] }));
+  const selectedSlots = defs.map((def, dayIndex) => def.type === 'custom'
+    ? def.full.slice()
+    : balancedSlots(def.full, slotCount(p.level, def.type, p.days), dayIndex, p.seed));
+  if (p.mode === 'auto') {
+    const protectedPatterns = new Set(p.priority.flatMap((muscle) => (PRIORITY_PATTERN[muscle] || []).map(slotPattern)));
+    ensureWeeklySlot(selectedSlots, defs, 'calves', protectedPatterns);
+    ensureWeeklySlot(selectedSlots, defs, 'core', protectedPatterns);
+  }
 
-  const days = defs.map(({ type, name, full }) => {
-    let slots = type === 'custom' ? full.slice() : full.slice(0, slotCount(p.level, type, p.days));
+  const days = defs.map(({ type, name, full }, dayIndex) => {
+    let slots = selectedSlots[dayIndex].slice();
     p.priority.forEach((mus) => {
       const list = PRIORITY_PATTERN[mus];
       const pat = list[(boostUsed[mus] || 0) % list.length];
@@ -706,20 +763,40 @@ function buildPlan(pRaw) {
 
   const plan = { profile: p, flags: fl, weeks: MACRO[p.level], days };
 
-  // ліміт часу: ріжемо ізоляцію з кінця, база лишається недоторканою
+  // Ліміт часу: спершу зменшуємо дешевий обсяг, потім вправи, але ніколи не лишаємо менше трьох рухів.
   if (p.timeCap) {
     const peak = plan.weeks.reduce((a, b) => (a.mult > b.mult ? a : b));
     plan.days.forEach((d, di) => {
       let guard = 0, trimmed = 0;
-      // спершу зрізаємо підходи в ізоляції, і лише потім прибираємо вправи — так зберігається спектр рухів
-      while (sessionMinutes(d, peak, plan, di) > p.timeCap && guard++ < 30) {
-        const cutSet = [...d.items].reverse().find((it) => it.ex.t === 'iso' && it.base > 2);
-        if (cutSet) { cutSet.base -= 1; trimmed++; continue; }
-        let cutAt = -1;
-        for (let i = d.items.length - 1; i >= 0; i--) if (d.items[i].ex.t === 'iso') { cutAt = i; break; }
-        // якщо ізоляції не лишилось — забираємо останній базовий рух, але не нижче трьох вправ
-        if (cutAt < 0) { if (d.items.length <= 3) break; cutAt = d.items.length - 1; }
-        d.items.splice(cutAt, 1); markHeavy(d); trimmed++;
+      while (sessionMinutes(d, peak, plan, di) > p.timeCap && guard++ < 60) {
+        const isoSet = [...d.items].reverse().find((it) => it.ex.t === 'iso' && it.base > 1);
+        if (isoSet) { isoSet.base -= 1; trimmed++; continue; }
+
+        if (d.items.length > 3) {
+          let cutAt = -1;
+          for (let i = d.items.length - 1; i >= 0; i--) {
+            if (d.items[i].ex.t === 'iso' && !p.priority.includes(d.items[i].ex.m)) { cutAt = i; break; }
+          }
+          if (cutAt < 0) {
+            for (let i = d.items.length - 1; i >= 0; i--) if (d.items[i].ex.t === 'iso') { cutAt = i; break; }
+          }
+          if (cutAt >= 0) {
+            d.items.splice(cutAt, 1); markHeavy(d); trimmed++; continue;
+          }
+        }
+
+        const compSet = [...d.items].reverse().find((it) => it.ex.t === 'comp' && it.base > 2);
+        if (compSet) { compSet.base -= 1; trimmed++; continue; }
+
+        if (d.items.length > 3) {
+          let cutAt = -1;
+          for (let i = d.items.length - 1; i >= 0; i--) {
+            if (!p.priority.includes(d.items[i].ex.m)) { cutAt = i; break; }
+          }
+          if (cutAt < 0) cutAt = d.items.length - 1;
+          d.items.splice(cutAt, 1); markHeavy(d); trimmed++; continue;
+        }
+        break;
       }
       d.trimmed = trimmed;
       d.overCap = sessionMinutes(d, peak, plan, di) > p.timeCap;
@@ -853,45 +930,44 @@ function warmup(plan, day) {
    ІНТЕРФЕЙС
    ============================================================ */
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
-.tk{--ink:#14181A;--surf:#E9EDEA;--card:#FFF;--steel:#66736F;--line:#D3D9D5;--deep:#2E2A72;--dl:#2FA090;--hot:#B4402F;
+.tk{--ink:#14181A;--surf:#E9EDEA;--card:#FFF;--steel:#66736F;--line:#D3D9D5;--deep:#2E2A72;--link:#2E2A72;--dl:#2FA090;--hot:#B4402F;
  --bar:#14181A;--bar-text:#EDF0EE;--bar-muted:#8A9B95;--alert:#FBEFEC;--alert-line:#E6C3B9;
- font-family:'IBM Plex Sans',system-ui,sans-serif;background:var(--surf);color:var(--ink);min-height:100vh;line-height:1.5;color-scheme:light;}
-.tk[data-theme="dark"]{--ink:#F1F5F3;--surf:#0B0E0D;--card:#151A18;--steel:#A8B4B0;--line:#303A36;--deep:#746CE8;--dl:#4FC4B0;--hot:#E87360;
+ font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--surf);color:var(--ink);min-height:100vh;line-height:1.5;color-scheme:light;}
+.tk[data-theme="dark"]{--ink:#F1F5F3;--surf:#0B0E0D;--card:#151A18;--steel:#A8B4B0;--line:#303A36;--deep:#584FC5;--link:#AAA5FF;--dl:#4FC4B0;--hot:#E87360;
  --bar:#070908;--bar-text:#F1F5F3;--bar-muted:#93A29C;--alert:#2B1815;--alert-line:#704036;color-scheme:dark;}
 .tk *{box-sizing:border-box;}
 .tk-bar{background:var(--bar);color:var(--bar-text);padding:18px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
-.tk-mark{font-family:'Unbounded',sans-serif;font-weight:700;font-size:17px;letter-spacing:-.02em;}
-.tk-sub{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--bar-muted);text-transform:uppercase;letter-spacing:.1em;}
-.tk-theme{font:inherit;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--bar-text);background:transparent;border:1px solid var(--bar-muted);border-radius:2px;padding:7px 10px;cursor:pointer;margin-left:auto;}
+.tk-mark{font-family:'Arial Black','Segoe UI',system-ui,sans-serif;font-weight:700;font-size:17px;letter-spacing:-.02em;}
+.tk-sub{font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;font-size:11px;color:var(--bar-muted);text-transform:uppercase;letter-spacing:.1em;}
+.tk-theme{font:inherit;font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;font-size:11px;color:var(--bar-text);background:transparent;border:1px solid var(--bar-muted);border-radius:2px;padding:7px 10px;cursor:pointer;margin-left:auto;}
 .tk-theme:hover{border-color:var(--bar-text);}
 .tk-theme:focus-visible{outline:2px solid var(--bar-text);outline-offset:2px;}
 .tk-main{max-width:900px;margin:0 auto;padding:20px 16px 64px;}
 .tk-card{background:var(--card);border:1px solid var(--line);border-radius:4px;padding:20px;margin-bottom:14px;}
-.tk-eyebrow{font-family:'IBM Plex Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--steel);margin-bottom:10px;}
-.tk-h{font-family:'Unbounded',sans-serif;font-weight:500;font-size:20px;letter-spacing:-.02em;margin:0 0 6px;}
+.tk-eyebrow{font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--steel);margin-bottom:10px;}
+.tk-h{font-family:'Arial Black','Segoe UI',system-ui,sans-serif;font-weight:500;font-size:20px;letter-spacing:-.02em;margin:0 0 6px;}
 .tk-p{font-size:14px;color:var(--steel);margin:0 0 14px;}
 .tk-field{margin-bottom:20px;}
 .tk-lbl{display:block;font-size:13px;font-weight:600;margin-bottom:8px;}
 .tk-hint{font-size:12px;color:var(--steel);margin-top:6px;}
 .tk-opts{display:flex;flex-wrap:wrap;gap:6px;}
 .tk-opt{font:inherit;font-size:13px;padding:8px 13px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:2px;cursor:pointer;}
-.tk-opt:hover{border-color:var(--deep);}
+.tk-opt:hover{border-color:var(--link);}
 .tk-opt[aria-pressed="true"]{background:var(--deep);border-color:var(--deep);color:#fff;}
-.tk-opt:focus-visible,.tk-wk:focus-visible,.tk-day:focus-visible,.tk-mini:focus-visible{outline:2px solid var(--deep);outline-offset:2px;}
-.tk-num{font:inherit;font-family:'IBM Plex Mono',monospace;width:88px;padding:9px 11px;border:1px solid var(--line);border-radius:2px;background:var(--card);color:var(--ink);}
-.tk-cta{font:inherit;font-family:'Unbounded',sans-serif;font-weight:500;font-size:15px;width:100%;padding:15px;background:var(--deep);color:#fff;border:none;border-radius:3px;cursor:pointer;}
+.tk-opt:focus-visible,.tk-wk:focus-visible,.tk-day:focus-visible,.tk-mini:focus-visible{outline:2px solid var(--link);outline-offset:2px;}
+.tk-num{font:inherit;font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;width:88px;padding:9px 11px;border:1px solid var(--line);border-radius:2px;background:var(--card);color:var(--ink);}
+.tk-cta{font:inherit;font-family:'Arial Black','Segoe UI',system-ui,sans-serif;font-weight:500;font-size:15px;width:100%;padding:15px;background:var(--deep);color:#fff;border:none;border-radius:3px;cursor:pointer;}
 .tk-cta[disabled]{background:#A9B3AF;cursor:not-allowed;}
 .tk-check{display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--steel);margin-bottom:14px;}
 .tk-check input{margin-top:3px;flex-shrink:0;}
 .tk-ramp{display:flex;align-items:flex-end;gap:3px;height:112px;margin-bottom:2px;}
 .tk-wk{flex:1;display:flex;flex-direction:column;justify-content:flex-end;background:none;border:none;padding:0;cursor:pointer;height:100%;min-width:0;}
 .tk-wk span{display:block;border-radius:2px 2px 0 0;transition:height .18s ease;}
-.tk-wk b{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:500;color:var(--steel);padding-top:7px;border-top:1px solid var(--line);overflow:hidden;}
+.tk-wk b{font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;font-size:10px;font-weight:500;color:var(--steel);padding-top:7px;border-top:1px solid var(--line);overflow:hidden;}
 .tk-wk[aria-pressed="true"] b{color:var(--ink);border-top:2px solid var(--ink);padding-top:6px;}
 .tk-wkmeta{display:flex;gap:18px;flex-wrap:wrap;align-items:baseline;margin:16px 0 8px;}
-.tk-rir{font-family:'Unbounded',sans-serif;font-weight:700;font-size:22px;letter-spacing:-.03em;}
-.tk-rir small{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:400;color:var(--steel);display:block;letter-spacing:0;}
+.tk-rir{font-family:'Arial Black','Segoe UI',system-ui,sans-serif;font-weight:700;font-size:22px;letter-spacing:-.03em;}
+.tk-rir small{font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;font-size:11px;font-weight:400;color:var(--steel);display:block;letter-spacing:0;}
 .tk-days{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;}
 .tk-day{font:inherit;font-size:13px;padding:8px 13px;border:1px solid var(--line);background:var(--card);border-radius:2px;cursor:pointer;color:var(--ink);}
 .tk-day[aria-pressed="true"]{background:var(--deep);border-color:var(--deep);color:#fff;}
@@ -899,21 +975,21 @@ const CSS = `
 .tk-warm ul{margin:6px 0 0;padding-left:18px;}
 .tk-warm li{margin-bottom:3px;}
 .tk-ex{border-top:1px solid var(--line);padding:14px 0;display:flex;gap:14px;}
-.tk-idx{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--steel);padding-top:2px;min-width:22px;}
+.tk-idx{font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;font-size:12px;color:var(--steel);padding-top:2px;min-width:22px;}
 .tk-exbody{flex:1;min-width:0;}
 .tk-exname{font-weight:600;font-size:15px;margin-bottom:4px;}
-.tk-badge{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;padding:2px 6px;border-radius:2px;margin-left:6px;white-space:nowrap;}
+.tk-badge{font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;font-size:10px;letter-spacing:.06em;padding:2px 6px;border-radius:2px;margin-left:6px;white-space:nowrap;}
 .tk-b-heavy{background:var(--hot);color:#fff;}
 .tk-b-prio{background:var(--deep);color:#fff;}
 .tk-b-tech{background:var(--surf);color:var(--steel);border:1px solid var(--line);}
-.tk-presc{font-family:'IBM Plex Mono',monospace;font-size:13px;}
+.tk-presc{font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;font-size:13px;}
 .tk-presc i{color:var(--steel);font-style:normal;}
 .tk-tags{font-size:12px;color:var(--steel);margin-top:4px;}
-.tk-mini{font:inherit;font-size:12px;background:none;border:none;color:var(--deep);cursor:pointer;padding:6px 8px 0 0;text-decoration:underline;text-underline-offset:3px;}
-.tk-tech{background:var(--surf);border-left:2px solid var(--deep);padding:11px 13px;margin-top:10px;font-size:13px;}
+.tk-mini{font:inherit;font-size:12px;background:none;border:none;color:var(--link);cursor:pointer;padding:6px 8px 0 0;text-decoration:underline;text-underline-offset:3px;}
+.tk-tech{background:var(--surf);border-left:2px solid var(--link);padding:11px 13px;margin-top:10px;font-size:13px;}
 .tk-tech p{margin:0 0 7px;}
 .tk-tech p:last-child{margin:0;}
-.tk-tech strong{font-size:11px;font-family:'IBM Plex Mono',monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--steel);display:block;margin-bottom:2px;}
+.tk-tech strong{font-size:11px;font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--steel);display:block;margin-bottom:2px;}
 .tk-swap{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;}
 .tk-vol{display:flex;flex-direction:column;gap:11px;}
 .tk-volrow{display:grid;grid-template-columns:110px 1fr 60px;gap:10px;align-items:center;font-size:13px;}
@@ -921,25 +997,25 @@ const CSS = `
 .tk-fill{height:100%;background:var(--deep);}
 .tk-fill.low{background:#A9B3AF;}
 .tk-fill.over{background:var(--hot);}
-.tk-volnum{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--steel);text-align:right;}
-.tk-split{grid-column:1/-1;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--steel);margin-top:-6px;}
+.tk-volnum{font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;font-size:12px;color:var(--steel);text-align:right;}
+.tk-split{grid-column:1/-1;font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;font-size:11px;color:var(--steel);margin-top:-6px;}
 .tk-foot{font-size:12px;color:var(--steel);border-top:1px solid var(--line);padding-top:14px;}
 .tk-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;}
-.tk-chip{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:4px 9px;background:var(--surf);border:1px solid var(--line);border-radius:2px;color:var(--steel);}
+.tk-chip{font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;font-size:11px;padding:4px 9px;background:var(--surf);border:1px solid var(--line);border-radius:2px;color:var(--steel);}
 .tk-rule{border-top:1px solid var(--line);padding:12px 0 0;margin-top:12px;font-size:13px;}
 .tk-load{display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap;}
-.tk-load b{font-family:'IBM Plex Mono',monospace;font-size:14px;background:var(--deep);color:#fff;padding:2px 8px;border-radius:2px;}
-.tk-wnum{font:inherit;font-family:'IBM Plex Mono',monospace;width:104px;padding:5px 8px;border:1px solid var(--line);border-radius:2px;background:var(--card);color:var(--ink);font-size:12px;}
+.tk-load b{font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;font-size:14px;background:var(--deep);color:#fff;padding:2px 8px;border-radius:2px;}
+.tk-wnum{font:inherit;font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;width:104px;padding:5px 8px;border:1px solid var(--line);border-radius:2px;background:var(--card);color:var(--ink);font-size:12px;}
 .tk-why{background:var(--card);border:1px dashed var(--line);border-left:2px solid var(--dl);padding:10px 12px;margin-top:9px;font-size:12.5px;}
 .tk-why ul{margin:4px 0 0;padding-left:16px;}
 .tk-why li{margin-bottom:2px;color:var(--steel);}
 .tk-alert{background:var(--alert);border:1px solid var(--alert-line);border-radius:3px;padding:12px 14px;font-size:13px;margin-bottom:14px;}
-.tk-alert b{display:block;font-size:11px;font-family:'IBM Plex Mono',monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--hot);margin-bottom:4px;}
-.tk-meta{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--steel);margin-bottom:12px;}
+.tk-alert b{display:block;font-size:11px;font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--hot);margin-bottom:4px;}
+.tk-meta{font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;font-size:11px;color:var(--steel);margin-bottom:12px;}
 .tk-wdays{display:flex;gap:4px;flex-wrap:wrap;}
-.tk-wd{font:inherit;font-family:'IBM Plex Mono',monospace;font-size:12px;width:42px;padding:8px 0;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:2px;cursor:pointer;}
+.tk-wd{font:inherit;font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;font-size:12px;width:42px;padding:8px 0;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:2px;cursor:pointer;}
 .tk-wd[aria-pressed="true"]{background:var(--deep);border-color:var(--deep);color:#fff;}
-.tk-rule b{display:block;font-size:11px;font-family:'IBM Plex Mono',monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--steel);margin-bottom:3px;}
+.tk-rule b{display:block;font-size:11px;font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--steel);margin-bottom:3px;}
 @media (max-width:520px){.tk-volrow{grid-template-columns:92px 1fr 52px;}.tk-ramp{height:92px;}}
 @media (prefers-reduced-motion:reduce){.tk-wk span{transition:none;}}
 `;
@@ -1145,10 +1221,7 @@ function ExRow({ item, idx, week, plan, heavy, tech, onSwap, anchors, onAnchor }
   const [why, setWhy] = useState(false);
   const p = plan.profile;
   const sets = setsFor(item, week, plan, heavy);
-  const allowed = new Set(EQUIP_SETS[p.place]);
-  if (p.bar) allowed.add('pullupbar');
-  const maxDiff = plan.flags.teen ? 2 : p.level === 'beg' ? 2 : 3;
-  const alts = EX.filter((e) => e.p === item.ex.p && e.id !== item.ex.id && allowed.has(e.eq) && e.d <= maxDiff);
+  const alts = EX.filter((e) => e.p === item.ex.p && e.id !== item.ex.id && isExerciseAllowed(e, p));
   const tempo = tempoFor(item, week, heavy);
 
   return (
@@ -1212,10 +1285,10 @@ function VolumePanel({ plan, week }) {
       <div className="tk-eyebrow">Тижневий обсяг · робочі підходи</div>
       <div className="tk-vol">
         {Object.keys(MUSCLE).map((k) => {
-          const [lo, hi] = targetFor(plan.profile.level, k, plan.flags.teen, plan.profile.sex);
+          const [, hi] = targetFor(plan.profile.level, k, plan.flags.teen, plan.profile.sex);
           const v = Math.round(byMuscle[k] || 0);
           const fr = freq[k] || 0;
-          const cls = v < lo ? 'low' : v > hi ? 'over' : '';
+          const cls = v === 0 ? 'low' : v > hi ? 'over' : '';
           const parts = (subs[k] || []).filter(([, n]) => n > 0);
           return (
             <div className="tk-volrow" key={k}>
@@ -1229,7 +1302,7 @@ function VolumePanel({ plan, week }) {
         })}
       </div>
       <p className="tk-hint" style={{ marginTop: 14 }}>
-        Друге число — стеля для рівня «{LEVEL_LABEL[plan.profile.level]}»; вона різна по групах. Другий рядок під групою — розподіл по підспецифікаціях:
+        Друге число — орієнтовна стеля для рівня «{LEVEL_LABEL[plan.profile.level]}»; вона різна по групах. Сірий порожній індикатор означає, що група не отримала прямого або допоміжного навантаження. Другий рядок під групою — розподіл по підспецифікаціях:
         ширина спини і товщина ростуть від різних рухів, литковий вимагає прямих колін, а камбалоподібний — зігнутих на 90°.
         {(SEX[plan.profile.sex] || SEX.x).cap.glutes ? ' Стелю на низ тіла піднято відповідно до обраної статі.' : ''}
       </p>
@@ -1237,23 +1310,100 @@ function VolumePanel({ plan, week }) {
   );
 }
 
+const STORAGE_VERSION = 2;
 const DEFAULT_PROFILE = {
   age: 39, sex: 'm', level: 'adv', days: 3, mode: 'auto',
   customDays: [{ groups: ['back', 'biceps'] }, { groups: ['chest', 'delts', 'triceps'] }, { groups: ['quads', 'hams', 'glutes', 'calves'] }],
   place: 'gym', bar: true, goal: 'hyper', priority: ['back', 'chest'], limits: [],
   weekdays: [0, 2, 4], timeCap: null, fatigue: false, seed: 0,
 };
-// Профіль, збережений старішою версією застосунку, може не мати щойно доданих полів.
-// Замість заміни стану цілком — зливаємо з дефолтами й перевіряємо, що масиви лишаються масивами.
+const DEFAULT_WEEKDAYS = {
+  2: [0, 3], 3: [0, 2, 4], 4: [0, 1, 3, 4], 5: [0, 1, 2, 4, 5], 6: [0, 1, 2, 3, 4, 5],
+};
+const PROFILE_VALUES = {
+  sex: new Set(['m', 'f', 'x']),
+  level: new Set(['beg', 'int', 'adv']),
+  mode: new Set(['auto', 'custom']),
+  place: new Set(['gym', 'db', 'band', 'bw']),
+  goal: new Set(['hyper', 'strength', 'fatloss', 'health']),
+  timeCap: new Set([45, 60, 75, 90]),
+};
+const cloneDefaultProfile = () => ({
+  ...DEFAULT_PROFILE,
+  priority: DEFAULT_PROFILE.priority.slice(),
+  limits: [],
+  weekdays: DEFAULT_PROFILE.weekdays.slice(),
+  customDays: DEFAULT_PROFILE.customDays.map((day) => ({ ...day, groups: day.groups.slice() })),
+});
+const uniqueAllowed = (value, allowed, max = Infinity) => {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((item) => allowed.has(item)))].slice(0, max);
+};
+const safeInteger = (value, fallback, min, max) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.round(n))) : fallback;
+};
+
 function sanitizeProfile(saved) {
-  if (!saved || typeof saved !== 'object') return DEFAULT_PROFILE;
-  const merged = { ...DEFAULT_PROFILE, ...saved };
-  const arr = (v, fallback) => (Array.isArray(v) ? v : fallback);
-  merged.priority = arr(saved.priority, DEFAULT_PROFILE.priority);
-  merged.limits = arr(saved.limits, DEFAULT_PROFILE.limits);
-  merged.weekdays = arr(saved.weekdays, DEFAULT_PROFILE.weekdays);
-  merged.customDays = arr(saved.customDays, DEFAULT_PROFILE.customDays).map((d) => ({ groups: arr(d && d.groups, []), name: d && d.name }));
-  return merged;
+  const fallback = cloneDefaultProfile();
+  if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return fallback;
+  const days = safeInteger(saved.days, fallback.days, 2, 6);
+  const muscleKeys = new Set(Object.keys(MUSCLE));
+  const safe = {
+    age: safeInteger(saved.age, fallback.age, 14, 70),
+    sex: PROFILE_VALUES.sex.has(saved.sex) ? saved.sex : fallback.sex,
+    level: PROFILE_VALUES.level.has(saved.level) ? saved.level : fallback.level,
+    days,
+    mode: PROFILE_VALUES.mode.has(saved.mode) ? saved.mode : fallback.mode,
+    place: PROFILE_VALUES.place.has(saved.place) ? saved.place : fallback.place,
+    bar: typeof saved.bar === 'boolean' ? saved.bar : fallback.bar,
+    goal: PROFILE_VALUES.goal.has(saved.goal) ? saved.goal : fallback.goal,
+    priority: saved.priority === undefined ? fallback.priority : uniqueAllowed(saved.priority, muscleKeys, 2),
+    limits: uniqueAllowed(saved.limits, new Set(Object.keys(LIMIT_LABEL))),
+    weekdays: uniqueAllowed(saved.weekdays, new Set([0, 1, 2, 3, 4, 5, 6]), days).sort((a, b) => a - b),
+    timeCap: PROFILE_VALUES.timeCap.has(Number(saved.timeCap)) ? Number(saved.timeCap) : null,
+    fatigue: typeof saved.fatigue === 'boolean' ? saved.fatigue : false,
+    seed: safeInteger(saved.seed, 0, 0, 1000000),
+    customDays: [],
+  };
+  if (safe.weekdays.length !== days) safe.weekdays = DEFAULT_WEEKDAYS[days].slice();
+  const sourceDays = Array.isArray(saved.customDays) ? saved.customDays : [];
+  safe.customDays = Array.from({ length: days }, (_, i) => {
+    const raw = sourceDays[i];
+    const name = raw && typeof raw.name === 'string' ? raw.name.trim().slice(0, 80) : undefined;
+    return { groups: uniqueAllowed(raw && raw.groups, muscleKeys), ...(name ? { name } : {}) };
+  });
+  return safe;
+}
+
+function isProfileBuildable(profile) {
+  const safe = sanitizeProfile(profile);
+  return safe.mode === 'auto' || (safe.customDays.length === safe.days && safe.customDays.every((day) => day.groups.length > 0));
+}
+
+function sanitizeAnchors(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out = {};
+  Object.entries(raw).forEach(([id, value]) => {
+    const ex = EX_BY_ID.get(id);
+    const n = Number(value);
+    if (ex && isLoadable(ex) && Number.isFinite(n) && n > 0 && n <= 1000) out[id] = Math.round(n * 4) / 4;
+  });
+  return out;
+}
+
+function sanitizeSwaps(raw, plan) {
+  if (!plan || !raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out = {};
+  Object.entries(raw).forEach(([key, value]) => {
+    if (!/^\d+:\d+$/.test(key)) return;
+    const [di, si] = key.split(':').map(Number);
+    const original = plan.days[di] && plan.days[di].items[si] && plan.days[di].items[si].ex;
+    const id = typeof value === 'string' ? value : value && value.id;
+    const candidate = EX_BY_ID.get(id);
+    if (original && candidate && candidate.id !== original.id && candidate.p === original.p && isExerciseAllowed(candidate, plan.profile)) out[key] = candidate.id;
+  });
+  return out;
 }
 
 class ErrorBoundary extends Component {
@@ -1282,7 +1432,7 @@ class ErrorBoundary extends Component {
 }
 
 function TrainingConstructorInner({ theme, onThemeToggle }) {
-  const [profile, setProfile] = useState(DEFAULT_PROFILE);
+  const [profile, setProfile] = useState(() => cloneDefaultProfile());
   const [anchors, setAnchors] = useState({});
   const [loaded, setLoaded] = useState(false);
   const [plan, setPlan] = useState(null);
@@ -1290,10 +1440,12 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
   const [day, setDay] = useState(0);
   const [swaps, setSwaps] = useState({});
   const [buildErr, setBuildErr] = useState(null);
+  const skipSaveRef = useRef(false);
   const set = (patch) => setProfile((s) => ({ ...s, ...patch }));
-  const build = (p) => {
+  const build = (candidate) => {
     try {
-      const prof = p || profile;
+      const prof = candidate && typeof candidate === 'object' && 'age' in candidate ? sanitizeProfile(candidate) : sanitizeProfile(profile);
+      setProfile(prof);
       setPlan(buildPlan(prof));
       setWk(0); setDay(0); setSwaps({}); setBuildErr(null);
     } catch (e) { setBuildErr(e.message || String(e)); }
@@ -1311,40 +1463,73 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
     } catch (e) { setBuildErr(e.message || String(e)); }
   };
 
-  // збереження між сесіями
+  // Збереження між сесіями з міграцією старих версій і відсіканням пошкоджених значень.
   useEffect(() => {
     (async () => {
       try {
         const r = await storage.get('tk-state');
         if (r && r.value) {
           const st = JSON.parse(r.value);
-          if (st.profile) {
-            const safe = sanitizeProfile(st.profile);
-            setProfile(safe);
-            if (st.built) setPlan(buildPlan(safe));
+          const safe = sanitizeProfile(st.profile);
+          let restoredPlan = null;
+          setProfile(safe);
+          if (st.built && isProfileBuildable(safe)) {
+            restoredPlan = buildPlan(safe);
+            setPlan(restoredPlan);
           }
-          if (st.anchors) setAnchors(st.anchors);
-          if (st.swaps) setSwaps(st.swaps);
+          setAnchors(sanitizeAnchors(st.anchors));
+          setSwaps(sanitizeSwaps(st.swaps, restoredPlan));
         }
-      } catch (e) { /* перший запуск або сховище недоступне */ }
+      } catch (e) {
+        setProfile(cloneDefaultProfile());
+        setPlan(null);
+        setAnchors({});
+        setSwaps({});
+      }
       setLoaded(true);
     })();
   }, []);
   useEffect(() => {
     if (!loaded) return;
+    if (skipSaveRef.current) {
+      skipSaveRef.current = false;
+      return;
+    }
     (async () => {
-      try { await storage.set('tk-state', JSON.stringify({ profile, anchors, swaps, built: !!plan })); } catch (e) {}
+      try {
+        await storage.set('tk-state', JSON.stringify({ version: STORAGE_VERSION, profile, anchors, swaps, built: !!plan }));
+      } catch (e) {}
     })();
   }, [profile, anchors, swaps, plan, loaded]);
-  const reset = async () => { try { await storage.delete('tk-state'); } catch (e) {} setAnchors({}); setSwaps({}); setPlan(null); };
+  const reset = async () => {
+    skipSaveRef.current = true;
+    setProfile(cloneDefaultProfile());
+    setAnchors({});
+    setSwaps({});
+    setPlan(null);
+    setWk(0);
+    setDay(0);
+    setBuildErr(null);
+    try { await storage.delete('tk-state'); } catch (e) {}
+  };
 
   const view = useMemo(() => {
     if (!plan) return null;
-    return { ...plan, days: plan.days.map((d, di) => ({ ...d, items: d.items.map((it, si) => (swaps[di + ':' + si] ? { ...it, ex: swaps[di + ':' + si] } : it)) })) };
+    return {
+      ...plan,
+      days: plan.days.map((d, di) => ({
+        ...d,
+        items: d.items.map((it, si) => {
+          const replacement = EX_BY_ID.get(swaps[di + ':' + si]);
+          return replacement ? { ...it, ex: replacement } : it;
+        }),
+      })),
+    };
   }, [plan, swaps]);
 
   const exportXlsx = async () => {
     try {
+      const { default: ExcelJS } = await import('exceljs/dist/exceljs.min.js');
       const wb = new ExcelJS.Workbook();
       const addSheet = (name, rows) => {
         const ws = wb.addWorksheet(name.replace(/[\\/?*\[\]:]/g, '-').slice(0, 31));
@@ -1388,7 +1573,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
       const a = document.createElement('a');
       a.href = url; a.download = 'programa-' + weeks.length + 'tyzhniv.xlsx';
       document.body.appendChild(a); a.click(); a.remove();
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (e) { alert('Експорт не вдався: ' + e.message); }
   };
 
@@ -1516,7 +1701,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
             <ExRow key={i} item={it} idx={i} week={week} plan={view}
               heavy={isHeavy(day, i, week, view)} tech={marks.has(i)}
               anchors={anchors} onAnchor={(id, v) => setAnchors((a) => ({ ...a, [id]: v ? Number(v) : 0 }))}
-              onSwap={(ex) => setSwaps((s) => ({ ...s, [day + ':' + i]: ex }))} />
+              onSwap={(ex) => setSwaps((s) => ({ ...s, [day + ':' + i]: ex.id }))} />
           ))}
         </div>
 
@@ -1550,6 +1735,12 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
     </div>
   );
 }
+
+export {
+  EX, MUSCLE, REGION, REGION_GROUP, DEFAULT_PROFILE, STORAGE_VERSION,
+  buildPlan, weeklyVolume, frequency, sessionMinutes, sanitizeProfile,
+  sanitizeAnchors, sanitizeSwaps, isProfileBuildable, isExerciseAllowed,
+};
 
 export default function TrainingConstructor() {
   const [theme, setTheme] = useState(() => {
