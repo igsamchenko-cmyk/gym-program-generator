@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs/dist/exceljs.min.js";
 
 /* Автономне сховище: той самий контракт {get,set,delete}, що й window.storage
    у середовищі Claude-артефактів, але на звичайному localStorage браузера.
@@ -1242,12 +1242,25 @@ export default function TrainingConstructor() {
     return { ...plan, days: plan.days.map((d, di) => ({ ...d, items: d.items.map((it, si) => (swaps[di + ':' + si] ? { ...it, ex: swaps[di + ':' + si] } : it)) })) };
   }, [plan, swaps]);
 
-  const exportXlsx = () => {
+  const exportXlsx = async () => {
     try {
-      const wb = XLSX.utils.book_new();
+      const wb = new ExcelJS.Workbook();
+      const addSheet = (name, rows) => {
+        const ws = wb.addWorksheet(name.replace(/[\\/?*\[\]:]/g, '-').slice(0, 31));
+        rows.forEach((r) => ws.addRow(r));
+        ws.columns.forEach((col) => {
+          let max = 8;
+          col.eachCell({ includeEmpty: true }, (cell) => { max = Math.max(max, String(cell.value ?? '').length); });
+          col.width = Math.min(60, max + 2);
+        });
+        ws.getRow(1).font = { bold: true };
+        return ws;
+      };
+
       const per = [['Тиждень', 'Фаза', 'Обсяг', 'RIR база', 'RIR ізоляція', 'Темп', '% від робочої', 'Інструкція']];
       weeks.forEach((w, i) => per.push([i + 1, w.tag, Math.round(w.mult * 100) + ' %', w.rb, w.ri, w.tempo, Math.round(w.load * 100) + ' %', w.note]));
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(per), 'Періодизація');
+      addSheet('Періодизація', per);
+
       view.days.forEach((d, di) => {
         const rows = [['№', 'Вправа', 'Підспецифікація', 'Тип', ...weeks.map((w, i) => 'Т' + (i + 1))]];
         d.items.forEach((it, i) => {
@@ -1258,15 +1271,23 @@ export default function TrainingConstructor() {
               return setsFor(it, w, view, h) + '×' + repsFor(it, profile.goal, w, h) + ' RIR' + rirFor(it, w, view) + (kg ? ' · ' + kg + 'кг' : '');
             })]);
         });
-        const nm = ((di + 1) + '. ' + (profile.weekdays.length === profile.days ? WEEKDAYS[profile.weekdays[di]] + ' ' : '') + d.name).slice(0, 28);
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), nm.replace(/[\\/?*\[\]:]/g, '-'));
+        const nm = ((di + 1) + '. ' + (profile.weekdays.length === profile.days ? WEEKDAYS[profile.weekdays[di]] + ' ' : '') + d.name);
+        addSheet(nm, rows);
       });
+
       const vol = [['Група', 'Підходи на піку', 'Стеля', 'Частота/тиж']];
       const peak = weeks.reduce((a, b) => (a.mult > b.mult ? a : b));
       const vv = weeklyVolume(view, peak).byMuscle, fr = frequency(view);
       Object.keys(MUSCLE).forEach((k) => vol.push([MUSCLE[k], Math.round(vv[k] || 0), targetFor(profile.level, k, view.flags.teen, profile.sex)[1], fr[k] || 0]));
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(vol), 'Обсяг');
-      XLSX.writeFile(wb, 'programa-' + weeks.length + 'tyzhniv.xlsx');
+      addSheet('Обсяг', vol);
+
+      const buf = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'programa-' + weeks.length + 'tyzhniv.xlsx';
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
     } catch (e) { alert('Експорт не вдався: ' + e.message); }
   };
 
