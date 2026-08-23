@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import { createServer } from 'vite';
@@ -23,6 +24,15 @@ try {
     check(Boolean(MUSCLE[ex.m]), 'Unknown primary muscle on ' + ex.id);
     check(REGION_GROUP[ex.rg] === ex.m, 'Region ' + ex.rg + ' must belong to ' + ex.m + ' on ' + ex.id);
     check(Array.isArray(ex.s) && ex.s.every((muscle) => MUSCLE[muscle]), 'Invalid secondary muscle on ' + ex.id);
+  });
+
+  const mediaExercises = EX.filter((ex) => ex.media);
+  equal(mediaExercises.length, 5, 'Pilot media library must cover five exercises');
+  equal(new Set(mediaExercises.map((ex) => ex.media.src)).size, mediaExercises.length, 'Exercise media paths must be unique');
+  mediaExercises.forEach((ex) => {
+    check(/^exercise-media\/[a-z0-9-]+\.webp$/.test(ex.media.src), 'Invalid media path on ' + ex.id);
+    check(typeof ex.media.alt === 'string' && ex.media.alt.length >= 30, 'Exercise media needs descriptive alt text on ' + ex.id);
+    check(existsSync(new URL('../public/' + ex.media.src, import.meta.url)), 'Missing exercise media file on ' + ex.id);
   });
 
   const corrupt = sanitizeProfile({

@@ -22,13 +22,14 @@ const storage = {
 /* ============================================================
    БАЗА ВПРАВ — 98 рухів, 18 підспецифікацій
    rg — підспецифікація · tp — темп · sd — вимога до стабілізаторів
-   tech — придатність для інтенсивних технік · video — слот під медіатеку
+   tech — придатність для інтенсивних технік · media — локальна схема руху
    ============================================================ */
 const EX = [
   // ---- горизонтальний жим ----
   { id: 'bb_bench', rg: 'chest_mid', tp: '3-1-2', sd: 1, tech: 0, n: 'Жим штанги лежачи', p: 'h_push', m: 'chest', s: ['triceps', 'delts'], eq: 'barbell', t: 'comp', d: 2, st: 1, av: ['shoulder'],
     cue: 'Лопатки зведені й притиснуті до лави, стопи щільно в підлозі. Штанга йде до низу грудей, лікті під кутом ~45° до корпусу.',
-    err: 'Відрив таза, лікті розведені строго в сторони, відбивання штанги від грудей.', video: '' },
+    err: 'Відрив таза, лікті розведені строго в сторони, відбивання штанги від грудей.', video: '',
+    media: { src: 'exercise-media/bb-bench.webp', alt: 'Жим штанги лежачи: верхня позиція та опускання штанги до нижньої частини грудей' } },
   { id: 'db_bench', rg: 'chest_mid', tp: '3-0-2', sd: 1, tech: 0, n: 'Жим гантелей лежачи', p: 'h_push', m: 'chest', s: ['triceps', 'delts'], eq: 'dumbbell', t: 'comp', d: 2, st: 1,
     cue: 'Гантелі опускаєш до рівня грудей, зберігаючи зведені лопатки. У верхній точці не стукай гантелями.',
     err: 'Завелика амплітуда вниз через біль у плечі, розхитування корпусу.', video: '' },
@@ -100,7 +101,8 @@ const EX = [
     err: 'Завелика резинка, яка перетворює вправу на стрибок.', video: '' },
   { id: 'lat_pulldown', rg: 'back_width', tp: '2-1-2', sd: 1, tech: 0, n: 'Тяга верхнього блоку', p: 'v_pull', m: 'back', s: ['biceps'], eq: 'machine', t: 'comp', d: 1, st: 0,
     cue: 'Стегна під валиками, корпус трохи відхилений назад. Тягнеш до ключиць, лікті вниз.',
-    err: 'Тяга за голову, розгойдування, «допомога» всім тілом.', video: '' },
+    err: 'Тяга за голову, розгойдування, «допомога» всім тілом.', video: '',
+    media: { src: 'exercise-media/lat-pulldown.webp', alt: 'Тяга верхнього блоку: руки випрямлені вгорі та гриф біля верхньої частини грудей' } },
   { id: 'band_pulldown', rg: 'back_width', tp: '2-1-2', sd: 1, tech: 0, n: 'Тяга резинки згори', p: 'v_pull', m: 'back', s: ['biceps'], eq: 'band', t: 'comp', d: 1, st: 0,
     cue: 'Закріпи резинку над головою (двері, гак). Тягнеш лікті вниз і назад, груди вперед.',
     err: 'Робота лише руками без опускання лопаток.', video: '' },
@@ -111,7 +113,8 @@ const EX = [
   // ---- присідання ----
   { id: 'bb_squat', rg: 'quad', tp: '3-1-2', sd: 2, tech: 0, n: 'Присідання зі штангою', p: 'squat', m: 'quads', s: ['glutes', 'hams', 'core'], eq: 'barbell', t: 'comp', d: 3, st: 2, av: ['knee', 'lowback'],
     cue: 'Штанга на трапеції, стопи на ширині плечей, носки трохи назовні. Сідаєш між стегон, коліна йдуть у напрямку носків.',
-    err: 'Відрив п’ят, звалювання колін усередину, круглення попереку внизу.', video: '' },
+    err: 'Відрив п’ят, звалювання колін усередину, круглення попереку внизу.', video: '',
+    media: { src: 'exercise-media/bb-squat.webp', alt: 'Присідання зі штангою: положення стоячи та нижня позиція з колінами в напрямку носків' } },
   { id: 'front_squat', rg: 'quad', tp: '3-1-2', sd: 2, tech: 0, n: 'Фронтальні присідання', p: 'squat', m: 'quads', s: ['core', 'glutes'], eq: 'barbell', t: 'comp', d: 3, st: 2, av: ['knee'],
     cue: 'Штанга на передніх дельтах, лікті високо. Корпус максимально вертикальний.',
     err: 'Опускання ліктів і «злітання» штанги вперед.', video: '' },
@@ -134,7 +137,8 @@ const EX = [
     err: 'Круглення попереку, ривок зі старту, штанга йде далеко від тіла.', video: '' },
   { id: 'rdl_bb', rg: 'ham', tp: '3-1-2', sd: 2, tech: 0, n: 'Румунська тяга зі штангою', p: 'hinge', m: 'hams', s: ['glutes', 'back'], eq: 'barbell', t: 'comp', d: 2, st: 2, av: ['lowback'],
     cue: 'Коліна злегка зігнуті й зафіксовані. Відводиш таз назад, штанга ковзає по стегнах до відчуття розтягу.',
-    err: 'Присідання замість шарніра, круглення спини, опускання нижче за можливості.', video: '' },
+    err: 'Присідання замість шарніра, круглення спини, опускання нижче за можливості.', video: '',
+    media: { src: 'exercise-media/rdl-bb.webp', alt: 'Румунська тяга зі штангою: стартова позиція та нахил з відведенням таза назад' } },
   { id: 'rdl_db', rg: 'ham', tp: '3-1-2', sd: 1, tech: 0, n: 'Румунська тяга з гантелями', p: 'hinge', m: 'hams', s: ['glutes'], eq: 'dumbbell', t: 'comp', d: 2, st: 1, av: ['lowback'],
     cue: 'Той самий шарнір, але гантелі дають більше свободи. Опускаєшся, доки тримаєш нейтральну спину.',
     err: 'Гантелі відходять від ніг, спина округлюється.', video: '' },
@@ -221,7 +225,8 @@ const EX = [
   // ---- середні дельти ----
   { id: 'db_lat_raise', rg: 'delt_side', tp: '2-1-2', sd: 1, tech: 1, n: 'Махи гантелями в сторони', p: 'side_delt', m: 'delts', s: [], eq: 'dumbbell', t: 'iso', d: 1, st: 0,
     cue: 'Легкий нахил корпусу вперед, лікті трохи зігнуті. Піднімаєш до рівня плечей, ведеш ліктем.',
-    err: 'Ривок корпусом, підйом вище за плечі з підняттям трапецій.', video: '' },
+    err: 'Ривок корпусом, підйом вище за плечі з підняттям трапецій.', video: '',
+    media: { src: 'exercise-media/db-lat-raise.webp', alt: 'Махи гантелями в сторони: руки внизу та підйом до рівня плечей' } },
   { id: 'band_lat_raise', rg: 'delt_side', tp: '2-1-2', sd: 0, tech: 1, n: 'Махи з резинкою в сторони', p: 'side_delt', m: 'delts', s: [], eq: 'band', t: 'iso', d: 1, st: 0,
     cue: 'Станеш на резинку, кінці в руках. Розводиш руки в сторони до горизонталі.',
     err: 'Зайве згинання ліктів, щоб полегшити рух.', video: '' },
@@ -1056,6 +1061,10 @@ const CSS = `
 .tk-tech p{margin:0 0 7px;}
 .tk-tech p:last-child{margin:0;}
 .tk-tech strong{font-size:11px;font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--steel);display:block;margin-bottom:2px;}
+.tk-media{margin:0 0 11px;background:#111318;border:1px solid var(--line);border-radius:3px;overflow:hidden;}
+.tk-media img{display:block;width:100%;height:auto;aspect-ratio:3/2;object-fit:contain;background:#111318;}
+.tk-media figcaption{padding:7px 10px;color:#BCC5C1;background:#111318;font-size:11px;font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;}
+.tk-media-pending{color:var(--steel);font-size:12px;}
 .tk-swap{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;}
 .tk-vol{display:flex;flex-direction:column;gap:11px;}
 .tk-volrow{display:grid;grid-template-columns:110px 1fr 60px;gap:10px;align-items:center;font-size:13px;}
@@ -1327,10 +1336,21 @@ function ExRow({ item, idx, dayIndex, week, plan, heavy, tech, onSwap, anchors, 
         )}
         {open && (
           <div className="tk-tech">
+            {item.ex.media ? (
+              <figure className="tk-media">
+                <img
+                  src={import.meta.env.BASE_URL + item.ex.media.src}
+                  alt={item.ex.media.alt}
+                  width="1200" height="800" loading="lazy" decoding="async"
+                />
+                <figcaption>Схема руху · початкова та кінцева фази</figcaption>
+              </figure>
+            ) : (
+              <p className="tk-media-pending">Схематична демонстрація для цієї вправи ще готується.</p>
+            )}
             <p><strong>Як виконувати</strong>{item.ex.cue}</p>
             <p><strong>Типові помилки</strong>{item.ex.err}</p>
             {heavy && <p><strong>Важкий блок</strong>Два підходи по 3–6 повторів, темп 2-1-X, повноцінна розминка обовʼязкова. Решта вправ дня без змін.</p>}
-            <p style={{ color: 'var(--steel)', fontSize: 12 }}>Відео зʼявиться тут, коли підключимо медіатеку.</p>
           </div>
         )}
         {swap && <div className="tk-swap">{alts.map((a) => (<button key={a.id} className="tk-opt" onClick={() => { onSwap(a); setSwap(false); }}>{a.n}</button>))}</div>}
