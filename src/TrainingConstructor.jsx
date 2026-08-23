@@ -5,7 +5,7 @@ import {
   PLACE_LABEL, WEEKDAYS, LEVEL_LABEL, GOAL_LABEL, SPLIT_NOTE,
 } from './data/labels.js';
 import {
-  SEX, BALANCE, GROUP_CAP, dayLabel, loadFor, isLoadable, PROGRESSION, ageFlags, isExerciseAllowed,
+  SEX, BALANCE, FOCUS, CUSTOM_FOCUS, AVOID, GROUP_CAP, dayLabel, focusForPriority, loadFor, isLoadable, PROGRESSION, ageFlags, isExerciseAllowed,
   buildPlan, isHeavy, setsFor, rirFor, repsFor, tempoFor, restFor, targetFor,
   weeklyVolume, sessionMinutes, scheduleWarnings, frequency, techMarks, warmup,
   DEFAULT_PROFILE, sanitizeProfile,
@@ -231,6 +231,18 @@ function Wizard({ p, set, onBuild }) {
     if (w.length > p.days) w = w.slice(w.length - p.days);
     set({ weekdays: w });
   };
+  const changeSex = (sex) => {
+    const followsSuggestedFocus = p.focus === SEX[p.sex].focus;
+    if (!followsSuggestedFocus) { set({ sex }); return; }
+    const focus = SEX[sex].focus;
+    set({ sex, focus, priority: FOCUS[focus].priority.slice() });
+  };
+  const changeFocus = (focus) => set({ focus, priority: FOCUS[focus].priority.slice() });
+  const changePriority = (priority) => {
+    const limited = priority.slice(-2);
+    set({ priority: limited, focus: focusForPriority(limited) });
+  };
+  const focusInfo = FOCUS[p.focus] || CUSTOM_FOCUS;
   const customReady = p.mode !== 'custom' || Array.from({ length: p.days }).every((_, i) => p.customDays[i] && p.customDays[i].groups.length);
   return (
     <div className="tk-card">
@@ -257,8 +269,7 @@ function Wizard({ p, set, onBuild }) {
 
       <div className="tk-field">
         <span className="tk-lbl">Стать</span>
-        <OptRow options={Object.entries(SEX).map(([k, v]) => [k, v.label])} value={p.sex}
-          onChange={(v) => set({ sex: v, priority: SEX[p.sex].prio.join() === p.priority.join() ? SEX[v].prio : p.priority })} />
+        <OptRow options={Object.entries(SEX).map(([k, v]) => [k, v.label])} value={p.sex} onChange={changeSex} />
         <div className="tk-hint">{SEX[p.sex].note}</div>
       </div>
 
@@ -329,9 +340,24 @@ function Wizard({ p, set, onBuild }) {
       </div>
 
       <div className="tk-field">
+        <span className="tk-lbl">Акцент програми</span>
+        <OptRow options={Object.entries(FOCUS).map(([k, v]) => [k, v.label])} value={p.focus} onChange={changeFocus} />
+        <div className="tk-hint">{focusInfo.note} Це стартовий профіль, а не обмеження за статтю.</div>
+      </div>
+
+      <div className="tk-field">
         <span className="tk-lbl">Пріоритетні групи <span style={{ fontWeight: 400, color: 'var(--steel)' }}>— не більше двох</span></span>
-        <OptRow multi options={Object.entries(MUSCLE)} value={p.priority} onChange={(v) => set({ priority: v.slice(-2) })} />
-        <div className="tk-hint">Пріоритетна група отримує додаткову вправу і ставиться на початок дня, поки ти свіжий.</div>
+        <OptRow multi options={Object.entries(MUSCLE)} value={p.priority} onChange={changePriority} />
+        <div className="tk-hint">Пріоритетна група отримує додаткову вправу і ставиться на початок дня, поки ти свіжий. Ручна зміна створює власний акцент.</div>
+      </div>
+
+      <div className="tk-field">
+        <span className="tk-lbl">Не хочу виконувати</span>
+        <OptRow multi options={Object.entries(AVOID).map(([k, v]) => [k, v.label])} value={p.avoid} onChange={(avoid) => set({ avoid })} />
+        <div className="tk-hint">
+          Обрані типи повністю виключаються і з програми, і з ручних замін.
+          {p.place === 'bw' && p.avoid.includes('floor') ? ' При тренуваннях лише з вагою тіла це може суттєво скоротити вибір вправ.' : ''}
+        </div>
       </div>
 
       <div className="tk-field">
@@ -655,8 +681,10 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
             <span className="tk-chip">{profile.days} дн/тиж</span>
             <span className="tk-chip">{PLACE_LABEL[profile.place]}</span>
             <span className="tk-chip">{GOAL_LABEL[profile.goal]}</span>
+            <span className="tk-chip">{(FOCUS[profile.focus] || CUSTOM_FOCUS).label}</span>
             <span className="tk-chip">{weeks.length} тижнів</span>
             {profile.priority.map((m) => <span className="tk-chip" key={m}>↑ {MUSCLE[m]}</span>)}
+            {profile.avoid.map((key) => <span className="tk-chip" key={'avoid-' + key}>× {AVOID[key].label}</span>)}
           </div>
           <button className="tk-mini" style={{ paddingLeft: 0 }} onClick={() => setPlan(null)}>Змінити параметри</button>
           <button className="tk-mini" onClick={copy}>Скопіювати</button>
@@ -744,6 +772,8 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
           <div className="tk-rule"><b>Темп</b>Опускання-пауза-підйом у секундах. X = вибуховий підйом. На делоаді темп сповільнюється до 3-1-3: те саме навантаження для тканин при меншій вазі.</div>
           <div className="tk-rule"><b>Правило застою</b>Якщо у вправі два тренування поспіль не додав ні повтору, ні ваги — зріж робочу вагу на 10 % і зайди в діапазон заново. Це не крок назад, а перезапуск прогресії.</div>
           <div className="tk-rule"><b>Реалістичний темп прогресу</b>{PROGRESSION[profile.level]}</div>
+          <div className="tk-rule"><b>Акцент програми — {(FOCUS[profile.focus] || CUSTOM_FOCUS).label}</b>{(FOCUS[profile.focus] || CUSTOM_FOCUS).note}</div>
+          {profile.avoid.length > 0 && <div className="tk-rule"><b>Особисті виключення</b>Не потрапляють у програму та заміни: {profile.avoid.map((key) => AVOID[key].label.toLowerCase()).join(', ')}.</div>}
           <div className="tk-rule"><b>Ліміт інтенсивних технік</b>Дроп-сети й часткові повтори в розтягнутій позиції — максимум 2 підходи на всю сесію, лише в ізоляції, ніколи в базових рухах. На делоад-тижнях прибрати повністю. За межею відмови втома росте швидше за стимул.</div>
           {profile.sex !== 'x' && <div className="tk-rule"><b>Поправка за статтю ({SEX[profile.sex].label})</b>{SEX[profile.sex].note}</div>}
           {profile.sex === 'f' && profile.age >= 45 && <div className="tk-rule"><b>Після 45</b>Силові з великою вагою — один із небагатьох інструментів, що впливають на щільність кісткової тканини. Це аргумент не знижувати ваги з віком, а зберігати важкі базові рухи в програмі, зменшуючи натомість обсяг допоміжної роботи.</div>}

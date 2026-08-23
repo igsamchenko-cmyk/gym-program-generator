@@ -27,6 +27,29 @@ const BALANCE = {
   support: { label: 'Потрібна опора', note: 'Рухи з високою вимогою до рівноваги будуть замінені, якщо є рівноцінний стабільний варіант.' },
 };
 
+const FOCUS = {
+  balanced: { label: 'Збалансовано', priority: [], note: 'Рівномірний розвиток усього тіла без естетичного перекосу.' },
+  glutes: { label: 'Сідниці та стегна', priority: ['glutes', 'hams'], note: 'Більше роботи на сідничні й задню поверхню стегна; стабільні варіанти отримують перевагу над складною штангою.' },
+  tone: { label: 'Все тіло / тонус', priority: ['glutes', 'delts'], note: 'Рівномірна програма з додатковим акцентом на сідничні та плечі.' },
+  posture: { label: 'Постава та плечі', priority: ['back', 'delts'], note: 'Додаткова частота тяг, задніх дельт і вправ для контролю лопаток.' },
+  upper: { label: 'Верх тіла', priority: ['back', 'chest'], note: 'Більше роботи на спину та груди зі збереженням повноцінного низу тіла.' },
+  athletic: { label: 'Сила і спортивність', priority: ['quads', 'back'], note: 'Акцент на великих рухах ніг і спини відповідно до стажу та технічної готовності.' },
+};
+const CUSTOM_FOCUS = { label: 'Власний акцент', note: 'Пріоритетні групи налаштовані вручну.' };
+
+const AVOID = {
+  barbell: { label: 'Штанга', note: 'усі вправи зі штангою' },
+  dips: { label: 'Бруси', note: 'звичайні та зворотні бруси' },
+  pullups: { label: 'Підтягування / вис', note: 'рухи на турніку' },
+  lunges: { label: 'Випади', note: 'випади й спліт-присідання' },
+  floor: { label: 'Вправи на підлозі', note: 'рухи лежачи, планки та віджимання від підлоги' },
+};
+const AVOID_IDS = {
+  dips: new Set(['weighted_dips', 'bench_dips']),
+  lunges: new Set(['db_lunge', 'rev_lunge_bw', 'bulgarian', 'split_band']),
+  floor: new Set(['pushup', 'pushup_band', 'pike_pushup', 'glute_bridge', 'superman', 'slider_curl', 'single_bridge', 'bw_rear_raise', 'close_pushup', 'plank', 'side_plank', 'dead_bug']),
+};
+
 /* слот = патерн[@підспецифікація]; порядок у списку — чернетка, далі його впорядковує движок */
 const DAY_SLOTS = {
   fbA: ['squat', 'h_push@chest_mid', 'h_pull@back_thick', 'hinge', 'side_delt', 'triceps', 'calves@calf_gastro', 'core', 'quad_iso'],
@@ -53,11 +76,11 @@ const SPLIT_NOTE = {
    2) відпочинок в ізоляції — з тієї ж причини він коротший;
    3) стартові пріоритети — це усереднена преференція, а НЕ фізіологічна вимога, і її можна змінити. */
 const SEX = {
-  m: { label: 'Чоловік', prio: ['back', 'chest'], cap: {}, restIso: '60–90 с',
-       note: 'Стартові пріоритети — спина й груди: усереднений акцент, не вимога. Стеля обсягу й відпочинок — базові.' },
-  f: { label: 'Жінка', prio: ['glutes', 'hams'], cap: { glutes: 1.2, hams: 1.15, quads: 1.1 }, restIso: '45–75 с',
-       note: 'Піднято стелю обсягу на сідничні, задню поверхню й квадрицепс, скорочено відпочинок в ізоляції: на однаковому відсотку від максимуму жінки в середньому стійкіші до втоми й швидше відновлюються між підходами. Верх тіла при цьому потребує БІЛЬШОЇ частоти, а не менших ваг. У розминку додано активацію відвідних м’язів стегна — ширший кут Q підвищує ризик для колінного суглоба.' },
-  x: { label: 'Не вказувати', prio: [], cap: {}, restIso: '60–90 с', note: 'Нейтральні налаштування: базова стеля обсягу, базовий відпочинок, без стартових пріоритетів.' },
+  m: { label: 'Чоловік', focus: 'upper', prio: ['back', 'chest'], cap: {}, restIso: '60–90 с',
+       note: 'Стартово запропоновано акцент на верх тіла, але стать не визначає силу, технічну готовність або обовʼязковий набір вправ.' },
+  f: { label: 'Жінка', focus: 'glutes', prio: ['glutes', 'hams'], cap: { glutes: 1.2, hams: 1.15, quads: 1.1 }, restIso: '45–75 с',
+       note: 'Стартово запропоновано акцент на сідниці та стегна. Це видимий профіль, який можна змінити; складність вправ однаково визначають стаж, контроль руху й особисті побажання.' },
+  x: { label: 'Не вказувати', focus: 'balanced', prio: [], cap: {}, restIso: '60–90 с', note: 'Нейтральні налаштування: збалансований акцент, базова стеля обсягу й базовий відпочинок.' },
 };
 
 /* Патерни, з яких збирається день у власній розкладці. Порядок усередині групи —
@@ -100,7 +123,7 @@ function customSlots(groups, p) {
 }
 const dayLabel = (groups) => groups.map((g) => MUSCLE[g]).join(' + ') || 'День без груп';
 
-const PRIORITY_PATTERN = { chest: ['h_push', 'h_push@chest_up'], back: ['v_pull@back_width', 'h_pull'], quads: ['quad_iso', 'squat'], hams: ['ham_iso', 'hinge'], glutes: ['glute_iso', 'hinge'], delts: ['side_delt', 'rear_delt'], biceps: ['biceps'], triceps: ['triceps'], calves: ['calves'], core: ['core'] };
+const PRIORITY_PATTERN = { chest: ['h_push', 'h_push@chest_up'], back: ['v_pull@back_width', 'h_pull'], quads: ['quad_iso', 'squat'], hams: ['ham_iso', 'hinge@ham'], glutes: ['glute_iso', 'hinge@glute'], delts: ['side_delt', 'rear_delt'], biceps: ['biceps'], triceps: ['triceps'], calves: ['calves'], core: ['core'] };
 const FALLBACK = { v_pull: 'h_pull', h_pull: 'v_pull', quad_iso: 'lunge', ham_iso: 'hinge', glute_iso: 'hinge', rear_delt: 'h_pull', side_delt: 'v_push' };
 
 /* ============================================================
@@ -197,6 +220,22 @@ function stableBias(p) {
   return bias;
 }
 
+function focusForPriority(priority) {
+  const selected = Array.isArray(priority) ? priority : [];
+  const match = Object.entries(FOCUS).find(([, value]) => value.priority.length === selected.length
+    && value.priority.every((muscle, index) => muscle === selected[index]));
+  return match ? match[0] : 'custom';
+}
+
+function isAvoidedExercise(ex, p) {
+  const avoid = Array.isArray(p && p.avoid) ? p.avoid : [];
+  return avoid.some((key) => {
+    if (key === 'barbell') return ex.eq === 'barbell';
+    if (key === 'pullups') return ex.eq === 'pullupbar';
+    return Boolean(AVOID_IDS[key] && AVOID_IDS[key].has(ex.id));
+  });
+}
+
 function exercisePreferenceScore(ex, p) {
   const bias = stableBias(p);
   let score = 0;
@@ -222,6 +261,23 @@ function exercisePreferenceScore(ex, p) {
     if (ex.id === 'front_squat') score += 3;
     if (ex.id === 'deadlift') score += 5;
   }
+
+  if (p.focus === 'glutes') {
+    if (ex.m === 'glutes') score -= 4;
+    if (ex.p === 'glute_iso') score -= 3;
+    if (['glute_bridge', 'hip_thrust', 'glute_machine', 'cable_kickback', 'kickback', 'band_abduct'].includes(ex.id)) score -= 3;
+    if (['leg_press', 'hack_squat', 'goblet', 'step_up', 'leg_curl'].includes(ex.id)) score -= 2;
+    if (['bb_squat', 'front_squat', 'deadlift', 'weighted_dips'].includes(ex.id)) score += 5;
+  }
+  if (p.focus === 'tone') {
+    if (JOINT_FRIENDLY.has(ex.id)) score -= 1.5;
+    if (AXIAL_HEAVY.has(ex.id) || ex.id === 'weighted_dips') score += 2.5;
+  }
+  if (p.focus === 'posture') {
+    if (['chest_row', 'cable_row', 'hammer_row', 'cable_face_pull', 'band_face_pull', 'reverse_pecdeck'].includes(ex.id)) score -= 2.5;
+    if (ex.id === 'weighted_dips') score += 3;
+  }
+  if (p.focus === 'athletic' && p.level === 'adv' && ex.t === 'comp') score -= 1.5;
 
   if (p.goal === 'strength' && p.level === 'adv' && p.balance === 'steady' && ex.eq === 'barbell' && ex.t === 'comp') score -= 3;
   return score;
@@ -255,6 +311,7 @@ function isExerciseAllowed(ex, p) {
   const basic = (candidate) => allowed.has(candidate.eq)
     && candidate.d <= maxDifficultyFor(p)
     && meetsExperienceGate(candidate, p)
+    && !isAvoidedExercise(candidate, p)
     && !(candidate.av || []).some((area) => limits.includes(area));
   if (!basic(ex)) return false;
   if (p.balance === 'support' && (ex.st || 0) >= 2) {
@@ -376,6 +433,11 @@ function buildPlan(pRaw) {
       pool = pool.filter((e) => !(e.av || []).some((a) => p.limits.includes(a)));
       if (pool.length < before) why.push('обмеження (' + p.limits.map((l) => LIMIT_LABEL[l]).join(', ') + '): рухи з ризиком для цієї зони виключені');
     }
+    if (p.avoid.length) {
+      const before = pool.length;
+      pool = pool.filter((e) => !isAvoidedExercise(e, p));
+      if (pool.length < before) why.push('особисті побажання: небажані типи вправ виключені з добору');
+    }
     const beforeReadiness = pool.length;
     pool = pool.filter((e) => e.d <= maxDifficultyFor(p) && meetsExperienceGate(e, p));
     if (pool.length < beforeReadiness) {
@@ -394,13 +456,13 @@ function buildPlan(pRaw) {
     if (!fd.length) { const fb = FALLBACK[pattern]; return fb && depth < 2 ? pick(fb, usedDay, depth + 1) : { ex: null, why: [] }; }
     const fresh = fd.filter((e) => !combo[e.p + ':' + e.rg]);
     pool = fresh.length ? fresh : fd;
-    const fw = pool.filter((e) => !usedWeek.has(e.id)); if (fw.length) pool = fw;
     const preferred = preferExercises(pool, p);
     if (preferred.length < pool.length) {
       const ageReason = p.age >= 35 ? 'вік ' + p.age + ' + ' : '';
-      why.push(ageReason + 'стаж, ціль і стабільність: обрано варіант із кращим співвідношенням стимулу до технічної втоми');
+      why.push(ageReason + 'акцент програми, стаж, ціль і стабільність: обрано варіант із кращим співвідношенням стимулу до технічної втоми');
       pool = preferred;
     }
+    const fw = pool.filter((e) => !usedWeek.has(e.id)); if (fw.length) pool = fw;
     if (depth > 0) why.push('прямого варіанту під цей слот немає в доступному інвентарі — взято найближчий патерн');
     return { ex: pool[(counter++ + counterSeed) % pool.length], why };
   };
@@ -448,14 +510,16 @@ function buildPlan(pRaw) {
   const days = defs.map(({ type, name, full, requestedGroups }, dayIndex) => {
     let slots = selectedSlots[dayIndex].slice();
     p.priority.forEach((mus) => {
-      const list = PRIORITY_PATTERN[mus];
-      const pat = list[(boostUsed[mus] || 0) % list.length];
-      const base = slotPattern(pat);
-      const already = slots.filter((slot) => {
-        const pattern = slotPattern(slot);
-        return (PRIORITY_PATTERN[mus] || []).some((candidate) => slotPattern(candidate) === pattern);
-      }).length;
-      if (full.some((slot) => slotPattern(slot) === base) && boostLeft[mus] > 0 && slots.length < 10 && already < (GROUP_CAP[mus] || 3)) {
+      const list = PRIORITY_PATTERN[mus] || [];
+      const start = (boostUsed[mus] || 0) % Math.max(1, list.length);
+      let pat = null;
+      for (let offset = 0; offset < list.length; offset++) {
+        const candidate = list[(start + offset) % list.length];
+        const base = slotPattern(candidate);
+        const already = slots.filter((slot) => (PRIORITY_PATTERN[mus] || []).some((item) => slotPattern(item) === slotPattern(slot))).length;
+        if (full.some((slot) => slotPattern(slot) === base) && already < (GROUP_CAP[mus] || 3)) { pat = candidate; break; }
+      }
+      if (pat && boostLeft[mus] > 0 && slots.length < 10) {
         slots.push(pat); boostLeft[mus] -= 1; boostUsed[mus] = (boostUsed[mus] || 0) + 1;
       }
     });
@@ -694,7 +758,7 @@ function warmup(plan, day) {
   if (f.longWarm) out.push('5 хв загальної розминки + суглобова гімнастика');
   if (f.cuff && upper) out.push('Зовнішня ротація з гумкою 2×15–20 — профілактика обертової манжети, лікоть притиснутий');
   if (f.older || plan.profile.balance !== 'steady') out.push('Баланс біля стійкої опори 2×20–30 с на ногу — без ризику падіння');
-  if (plan.profile.sex === 'f' && (legs || hinge)) out.push('Відведення стегна з міні-резинкою 2×15 — активація середньої сідничної, контроль траєкторії коліна');
+  if (['glutes', 'tone'].includes(plan.profile.focus) && (legs || hinge)) out.push('Відведення стегна з міні-резинкою 2×15 — активація середньої сідничної перед цільовою роботою');
   if (plan.profile.limits.includes('knee') && legs) out.push('Розгинання ніг 1×20 з мінімальною вагою — прогріти колінний суглоб');
   if (plan.profile.limits.includes('lowback') && (hinge || legs)) out.push('Мертвий жук 2×8 на бік — увімкнути стабілізацію перед осьовими рухами');
   if (plan.profile.limits.includes('shoulder') && upper) out.push('Розтяжка грудного відділу біля стіни 1×10 — повернути амплітуду плечу перед жимами');
@@ -706,7 +770,7 @@ function warmup(plan, day) {
 const DEFAULT_PROFILE = {
   age: 39, sex: 'm', level: 'adv', days: 3, mode: 'auto',
   customDays: [{ groups: ['back', 'biceps'] }, { groups: ['chest', 'delts', 'triceps'] }, { groups: ['quads', 'hams', 'glutes', 'calves'] }],
-  place: 'gym', bar: true, goal: 'hyper', priority: ['back', 'chest'], limits: [], balance: 'steady',
+  place: 'gym', bar: true, goal: 'hyper', focus: 'upper', priority: ['back', 'chest'], avoid: [], limits: [], balance: 'steady',
   weekdays: [0, 2, 4], timeCap: null, fatigue: false, seed: 0,
 };
 const DEFAULT_WEEKDAYS = {
@@ -718,12 +782,15 @@ const PROFILE_VALUES = {
   mode: new Set(['auto', 'custom']),
   place: new Set(['gym', 'db', 'band', 'bw']),
   goal: new Set(['hyper', 'strength', 'fatloss', 'health']),
+  focus: new Set([...Object.keys(FOCUS), 'custom']),
+  avoid: new Set(Object.keys(AVOID)),
   balance: new Set(Object.keys(BALANCE)),
   timeCap: new Set([45, 60, 75, 90]),
 };
 const cloneDefaultProfile = () => ({
   ...DEFAULT_PROFILE,
   priority: DEFAULT_PROFILE.priority.slice(),
+  avoid: DEFAULT_PROFILE.avoid.slice(),
   limits: [],
   weekdays: DEFAULT_PROFILE.weekdays.slice(),
   customDays: DEFAULT_PROFILE.customDays.map((day) => ({ ...day, groups: day.groups.slice() })),
@@ -742,6 +809,8 @@ function sanitizeProfile(saved) {
   if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return fallback;
   const days = safeInteger(saved.days, fallback.days, 2, 6);
   const muscleKeys = new Set(Object.keys(MUSCLE));
+  const savedPriority = saved.priority === undefined ? fallback.priority.slice() : uniqueAllowed(saved.priority, muscleKeys, 2);
+  const inferredFocus = focusForPriority(savedPriority);
   const safe = {
     age: safeInteger(saved.age, fallback.age, 14, 70),
     sex: PROFILE_VALUES.sex.has(saved.sex) ? saved.sex : fallback.sex,
@@ -751,8 +820,10 @@ function sanitizeProfile(saved) {
     place: PROFILE_VALUES.place.has(saved.place) ? saved.place : fallback.place,
     bar: typeof saved.bar === 'boolean' ? saved.bar : fallback.bar,
     goal: PROFILE_VALUES.goal.has(saved.goal) ? saved.goal : fallback.goal,
+    focus: PROFILE_VALUES.focus.has(saved.focus) ? saved.focus : inferredFocus,
     balance: PROFILE_VALUES.balance.has(saved.balance) ? saved.balance : fallback.balance,
-    priority: saved.priority === undefined ? fallback.priority : uniqueAllowed(saved.priority, muscleKeys, 2),
+    priority: savedPriority,
+    avoid: uniqueAllowed(saved.avoid, PROFILE_VALUES.avoid),
     limits: uniqueAllowed(saved.limits, new Set(Object.keys(LIMIT_LABEL))),
     weekdays: uniqueAllowed(saved.weekdays, new Set([0, 1, 2, 3, 4, 5, 6]), days).sort((a, b) => a - b),
     timeCap: PROFILE_VALUES.timeCap.has(Number(saved.timeCap)) ? Number(saved.timeCap) : null,
@@ -775,11 +846,11 @@ function isProfileBuildable(profile) {
   return safe.mode === 'auto' || (safe.customDays.length === safe.days && safe.customDays.every((day) => day.groups.length > 0));
 }
 export {
-  JOINT_FRIENDLY, AXIAL_HEAVY, REQUIRES_FOUNDATION, ADVANCED_ONLY, BALANCE, DAY_SLOTS, SPLITS, SEX,
+  JOINT_FRIENDLY, AXIAL_HEAVY, REQUIRES_FOUNDATION, ADVANCED_ONLY, BALANCE, FOCUS, CUSTOM_FOCUS, AVOID, DAY_SLOTS, SPLITS, SEX,
   GROUP_SLOTS, GROUP_WEIGHT, GROUP_CAP, customSlots, dayLabel,
   PRIORITY_PATTERN, FALLBACK, MACRO, LOADS, HEAVY_LOAD, round2, loadFor, isLoadable,
   REPS, VOLUME_TARGET, MUSCLE_CAP, PROGRESSION, ageFlags, stableBias,
-  exercisePreferenceScore, preferExercises, maxDifficultyFor, meetsExperienceGate, isExerciseAllowed,
+  focusForPriority, isAvoidedExercise, exercisePreferenceScore, preferExercises, maxDifficultyFor, meetsExperienceGate, isExerciseAllowed,
   slotCount, baseSets, LAST_IN_DAY, orderScore, HEAVY_RANK, markHeavy, buildPlan,
   isHeavy, setsFor, rirFor, repsFor, tempoFor, restFor, targetFor, weeklyVolume,
   restSec, sessionMinutes, scheduleWarnings, frequency, techMarks, warmup,
