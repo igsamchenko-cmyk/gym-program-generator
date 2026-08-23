@@ -1161,6 +1161,11 @@ const CSS = `
 .tk-theme{font:inherit;font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;font-size:11px;color:var(--bar-text);background:transparent;border:1px solid var(--bar-muted);border-radius:2px;padding:7px 10px;cursor:pointer;margin-left:auto;}
 .tk-theme:hover{border-color:var(--bar-text);}
 .tk-theme:focus-visible{outline:2px solid var(--bar-text);outline-offset:2px;}
+.tk-credit{position:fixed;right:16px;bottom:14px;z-index:20;display:flex;align-items:baseline;gap:6px;padding:7px 11px;
+ background:var(--card);color:var(--steel);border:1px solid var(--line);border-radius:999px;box-shadow:0 5px 18px rgba(0,0,0,.14);
+ pointer-events:none;white-space:nowrap;}
+.tk-credit span{font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;font-size:8px;text-transform:uppercase;letter-spacing:.12em;}
+.tk-credit strong{font-family:Georgia,'Times New Roman',serif;font-size:13px;font-style:italic;font-weight:600;letter-spacing:.01em;color:var(--ink);}
 .tk-main{max-width:900px;margin:0 auto;padding:20px 16px 64px;}
 .tk-card{background:var(--card);border:1px solid var(--line);border-radius:4px;padding:20px;margin-bottom:14px;}
 .tk-eyebrow{font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--steel);margin-bottom:10px;}
@@ -1239,7 +1244,7 @@ const CSS = `
 .tk-wd{font:inherit;font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;font-size:12px;width:42px;padding:8px 0;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:2px;cursor:pointer;}
 .tk-wd[aria-pressed="true"]{background:var(--deep);border-color:var(--deep);color:#fff;}
 .tk-rule b{display:block;font-size:11px;font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--steel);margin-bottom:3px;}
-@media (max-width:520px){.tk-volrow{grid-template-columns:92px 1fr 52px;}.tk-ramp{height:92px;}}
+@media (max-width:520px){.tk-volrow{grid-template-columns:92px 1fr 52px;}.tk-ramp{height:92px;}.tk-credit{right:8px;bottom:8px;padding:6px 9px;}.tk-credit strong{font-size:12px;}}
 @media (prefers-reduced-motion:reduce){.tk-wk span{transition:none;}}
 `;
 
@@ -1253,6 +1258,9 @@ function Header({ theme, onToggle }) {
         aria-label={dark ? 'Увімкнути світлу тему' : 'Увімкнути темну тему'}>
         {dark ? '☀ Світла тема' : '◐ Темна тема'}
       </button>
+      <div className="tk-credit" aria-label="Developed by Ihor Samchenko">
+        <span>developed by</span><strong>Ihor Samchenko</strong>
+      </div>
     </div>
   );
 }
