@@ -85,7 +85,16 @@ const CSS = `
 .tk-day[aria-pressed="true"]{background:var(--deep);border-color:var(--deep);color:#fff;}
 .tk-warm{background:var(--surf);border-radius:3px;padding:12px 14px;margin-bottom:16px;font-size:13px;}
 .tk-warm ul{margin:6px 0 0;padding-left:18px;}
-.tk-warm li{margin-bottom:3px;}
+.tk-warm li{margin-bottom:6px;}
+.tk-warm-head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;}
+.tk-warm-toggle{font:inherit;font-size:11px;color:var(--link);background:none;border:0;padding:2px 0;cursor:pointer;text-decoration:underline;text-underline-offset:3px;}
+.tk-warm-toggle:focus-visible{outline:2px solid var(--link);outline-offset:2px;}
+.tk-warm-guide{margin:8px 0 12px;max-width:680px;}
+.tk-warm-guide .tk-media{margin-bottom:8px;}
+.tk-warm-notes{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.tk-warm-note{background:var(--card);border-left:2px solid var(--dl);padding:8px 10px;color:var(--steel);font-size:12px;}
+.tk-warm-note.bad{border-left-color:var(--hot);}
+.tk-warm-note b{display:block;color:var(--ink);font-size:10px;text-transform:uppercase;letter-spacing:.07em;margin-bottom:2px;}
 .tk-ex{border-top:1px solid var(--line);padding:14px 0;display:flex;gap:14px;}
 .tk-idx{font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;font-size:12px;color:var(--steel);padding-top:2px;min-width:22px;}
 .tk-exbody{flex:1;min-width:0;}
@@ -133,7 +142,7 @@ const CSS = `
 .tk-wd[aria-pressed="true"]{background:var(--deep);border-color:var(--deep);color:#fff;}
 .tk-rule b{display:block;font-size:11px;font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--steel);margin-bottom:3px;}
 @media (max-width:760px){.tk{background-position:left top;background-size:auto 100vh;background-attachment:scroll;}}
-@media (max-width:520px){.tk-volrow{grid-template-columns:92px 1fr 52px;}.tk-ramp{height:92px;}.tk-credit{right:8px;bottom:8px;padding:6px 9px;}.tk-credit strong{font-size:12px;}}
+@media (max-width:520px){.tk-volrow{grid-template-columns:92px 1fr 52px;}.tk-ramp{height:92px;}.tk-credit{right:8px;bottom:8px;padding:6px 9px;}.tk-credit strong{font-size:12px;}.tk-warm-notes{grid-template-columns:1fr;}}
 @media (prefers-reduced-motion:reduce){.tk-wk span{transition:none;}}
 `;
 
@@ -176,6 +185,36 @@ function OptRow({ options, value, onChange, multi }) {
         <button key={k} type="button" className="tk-opt" aria-pressed={active(k)} onClick={() => toggle(k)}>{label}</button>
       ))}
     </div>
+  );
+}
+
+function WarmupItem({ item }) {
+  const [open, setOpen] = useState(false);
+  const text = typeof item === 'string' ? item : item.text;
+  const media = typeof item === 'string' ? null : item.media;
+  return (
+    <li>
+      <div className="tk-warm-head">
+        <span>{text}</span>
+        {media && (
+          <button type="button" className="tk-warm-toggle" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+            {open ? 'Сховати техніку' : 'Показати техніку'}
+          </button>
+        )}
+      </div>
+      {open && media && (
+        <div className="tk-warm-guide">
+          <figure className="tk-media">
+            <img loading="lazy" src={import.meta.env.BASE_URL + media.src} alt={media.alt || text} />
+            <figcaption>Початкова й кінцева позиції руху</figcaption>
+          </figure>
+          <div className="tk-warm-notes">
+            <div className="tk-warm-note"><b>Підказка</b>{item.cue}</div>
+            <div className="tk-warm-note bad"><b>Типова помилка</b>{item.err}</div>
+          </div>
+        </div>
+      )}
+    </li>
   );
 }
 
@@ -743,7 +782,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
           )}
           <div className="tk-warm">
             <strong style={{ fontSize: 13 }}>Розминка</strong>
-            <ul>{warm.map((w, i) => <li key={i}>{w}</li>)}</ul>
+            <ul>{warm.map((item) => <WarmupItem key={item.id} item={item} />)}</ul>
           </div>
           {view.days[day].items.map((it, i) => (
             <ExRow key={i} item={it} idx={i} week={week} plan={view}

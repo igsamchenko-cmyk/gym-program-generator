@@ -747,6 +747,56 @@ function techMarks(day, week, plan) {
   day.items.forEach((it, i) => { if (out.size < 2 && it.ex.t === 'iso' && it.ex.tech) out.add(i); });
   return out;
 }
+const WARMUP_GUIDES = {
+  general: {
+    text: '5 хв загальної розминки + суглобова гімнастика',
+  },
+  externalRotation: {
+    text: 'Зовнішня ротація з гумкою 2×15–20 — підготувати обертову манжету, лікоть притиснутий',
+    media: { src: 'exercise-media/ext-rotation.webp', alt: 'Зовнішня ротація плеча з гумкою: початкова й кінцева позиції' },
+    cue: 'Лікоть притисни до боку, передпліччя відведи назовні без повороту корпусу.',
+    err: 'Лікоть відривається від тулуба або рух створюється поворотом спини.',
+  },
+  supportedBalance: {
+    text: 'Баланс біля стійкої опори 2×20–30 с на ногу — без ризику падіння',
+    media: { src: 'warmup-media/supported-balance.webp', alt: 'Баланс на одній нозі з легкою опорою рукою' },
+    cue: 'Лише торкайся опори пальцями, тримай таз рівно й дивись в одну точку.',
+    err: 'Повністю висіти на руці, завалювати таз або затримувати дихання.',
+  },
+  bandAbduction: {
+    text: 'Відведення стегна з міні-резинкою 2×15 — активація середньої сідничної перед цільовою роботою',
+    media: { src: 'exercise-media/band-abduct.webp', alt: 'Відведення стегна з міні-резинкою: початкова й кінцева позиції' },
+    cue: 'Носок дивиться вперед, таз не розвертається, ногу відводь у комфортній амплітуді.',
+    err: 'Нахиляти корпус убік або розкривати носок назовні замість руху стегна.',
+  },
+  legExtension: {
+    text: 'Розгинання ніг 1×20 з мінімальною вагою — прогріти колінний суглоб',
+    media: { src: 'exercise-media/leg-ext.webp', alt: 'Розгинання ніг у тренажері: початкова й кінцева позиції' },
+    cue: 'Використай легку вагу, рухайся плавно й лише в безболісній амплітуді.',
+    err: 'Ривок із нижньої точки або важка вага, що змушує відривати таз від сидіння.',
+  },
+  deadBug: {
+    text: 'Мертвий жук 2×8 на бік — увімкнути стабілізацію перед осьовими рухами',
+    media: { src: 'exercise-media/dead-bug.webp', alt: 'Мертвий жук: початкова й кінцева позиції' },
+    cue: 'Притисни поперек до підлоги й повільно опускай протилежні руку та ногу.',
+    err: 'Відривати поперек, поспішати або одночасно опускати руку й ногу з одного боку.',
+  },
+  wallSlide: {
+    text: 'Ковзання руками по стіні 1×10 — повернути комфортну амплітуду плечам перед жимами',
+    media: { src: 'warmup-media/wall-slide.webp', alt: 'Ковзання руками по стіні з позиції W у позицію Y' },
+    cue: 'Ребра тримай опущеними, ковзай руками вгору лише до комфортної висоти без болю.',
+    err: 'Прогинати поперек, тягнути плечі до вух або силоміць притискати руки до стіни.',
+  },
+  squatHold: {
+    text: 'Присідання вагою тіла 1×15 + утримання в нижній точці 20 с — розкачати амплітуду кульшового й гомілковостопного',
+    media: { src: 'exercise-media/bw-squat.webp', alt: 'Присідання вагою тіла: верхня й нижня позиції' },
+    cue: 'Тримай повну стопу на підлозі, коліна спрямовуй уздовж носків, глибина — контрольована.',
+    err: 'Відривати пʼяти, зводити коліна всередину або втрачати нейтральне положення спини.',
+  },
+};
+
+const warmupGuide = (id) => ({ id, ...WARMUP_GUIDES[id] });
+
 function warmup(plan, day) {
   const f = plan.flags, out = [];
   const pats = new Set((day ? day.items : []).map((it) => it.ex.p));
@@ -755,15 +805,23 @@ function warmup(plan, day) {
   const legs = has('squat', 'lunge', 'quad_iso');
   const hinge = has('hinge', 'ham_iso');
 
-  if (f.longWarm) out.push('5 хв загальної розминки + суглобова гімнастика');
-  if (f.cuff && upper) out.push('Зовнішня ротація з гумкою 2×15–20 — профілактика обертової манжети, лікоть притиснутий');
-  if (f.older || plan.profile.balance !== 'steady') out.push('Баланс біля стійкої опори 2×20–30 с на ногу — без ризику падіння');
-  if (['glutes', 'tone'].includes(plan.profile.focus) && (legs || hinge)) out.push('Відведення стегна з міні-резинкою 2×15 — активація середньої сідничної перед цільовою роботою');
-  if (plan.profile.limits.includes('knee') && legs) out.push('Розгинання ніг 1×20 з мінімальною вагою — прогріти колінний суглоб');
-  if (plan.profile.limits.includes('lowback') && (hinge || legs)) out.push('Мертвий жук 2×8 на бік — увімкнути стабілізацію перед осьовими рухами');
-  if (plan.profile.limits.includes('shoulder') && upper) out.push('Розтяжка грудного відділу біля стіни 1×10 — повернути амплітуду плечу перед жимами');
-  if ((legs || hinge) && !plan.profile.limits.includes('knee')) out.push('Присідання вагою тіла 1×15 + утримання в нижній точці 20 с — розкачати амплітуду кульшового й гомілковостопного');
-  out.push('2–3 підвідні підходи в першій базовій вправі, від легкої ваги до робочої');
+  if (f.longWarm) out.push(warmupGuide('general'));
+  if (f.cuff && upper) out.push(warmupGuide('externalRotation'));
+  if (f.older || plan.profile.balance !== 'steady') out.push(warmupGuide('supportedBalance'));
+  if (['glutes', 'tone'].includes(plan.profile.focus) && (legs || hinge)) out.push(warmupGuide('bandAbduction'));
+  if (plan.profile.limits.includes('knee') && legs) out.push(warmupGuide('legExtension'));
+  if (plan.profile.limits.includes('lowback') && (hinge || legs)) out.push(warmupGuide('deadBug'));
+  if (plan.profile.limits.includes('shoulder') && upper) out.push(warmupGuide('wallSlide'));
+  if ((legs || hinge) && !plan.profile.limits.includes('knee')) out.push(warmupGuide('squatHold'));
+
+  const first = day && day.items && day.items[0] && day.items[0].ex;
+  out.push({
+    id: 'rampSets',
+    text: '2–3 підвідні підходи в першій базовій вправі, від легкої ваги до робочої',
+    media: first && first.media ? { ...first.media } : null,
+    cue: first ? 'Повтори техніку вправи «' + first.n + '», поступово додаючи вагу без наближення до відмови.' : 'Поступово підведи навантаження до робочого.',
+    err: 'Перетворювати підвідні підходи на важкі робочі або різко переходити до повної ваги.',
+  });
   return out;
 }
 
@@ -853,6 +911,6 @@ export {
   focusForPriority, isAvoidedExercise, exercisePreferenceScore, preferExercises, maxDifficultyFor, meetsExperienceGate, isExerciseAllowed,
   slotCount, baseSets, LAST_IN_DAY, orderScore, HEAVY_RANK, markHeavy, buildPlan,
   isHeavy, setsFor, rirFor, repsFor, tempoFor, restFor, targetFor, weeklyVolume,
-  restSec, sessionMinutes, scheduleWarnings, frequency, techMarks, warmup,
+  restSec, sessionMinutes, scheduleWarnings, frequency, techMarks, WARMUP_GUIDES, warmup,
   DEFAULT_PROFILE, sanitizeProfile, isProfileBuildable,
 };
