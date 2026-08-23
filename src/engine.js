@@ -10,6 +10,17 @@ const JOINT_FRIENDLY = new Set(['seated_lat_raise', 'cable_lat_raise', 'ez_curl'
 // Рухи з більшою вимогою до стабілізації тулуба. Це не список «небезпечних» вправ:
 // він потрібен лише для ранжування рівноцінних варіантів.
 const AXIAL_HEAVY = new Set(['bb_squat', 'front_squat', 'deadlift', 'rdl_bb', 'ohp', 'bb_row', 'band_gm']);
+// Вправи, для яких технічної складності недостатньо як критерію: вони ще й
+// вимагають попередньої відносної сили, контролю або складного налаштування.
+const REQUIRES_FOUNDATION = new Set([
+  'pushup', 'pushup_band', 'pike_pushup', 'pullup', 'pullup_band',
+  'db_pullover', 'rdl_bb', 'rdl_db', 'hip_thrust', 'band_gm',
+  'db_lunge', 'bulgarian', 'split_band', 'slider_curl', 'nordic',
+  'single_bridge', 'db_skull', 'close_pushup', 'bench_dips',
+  'hanging_leg', 'incline_fly',
+]);
+const ADVANCED_ONLY = new Set(['weighted_dips']);
+const LEVEL_RANK = { beg: 0, int: 1, adv: 2 };
 const BALANCE = {
   steady: { label: 'Стабільно', note: 'Повний вибір вправ відповідно до стажу й цілі.' },
   cautious: { label: 'Іноді нестійко', note: 'Варіанти з опорою та тренажери отримають вищий пріоритет.' },
@@ -147,7 +158,7 @@ function loadFor(item, week, heavy, anchors) {
   return round2(a * week.load * (heavy ? HEAVY_LOAD : 1));
 }
 // вправи, для яких має сенс вести робочу вагу
-const isLoadable = (ex) => ['barbell', 'dumbbell', 'machine', 'cable'].includes(ex.eq);
+const isLoadable = (ex) => ['barbell', 'dumbbell', 'machine', 'cable', 'dipstation'].includes(ex.eq);
 
 const REPS = {
   strength: { comp: '3–6', iso: '8–12' },
@@ -223,15 +234,28 @@ function preferExercises(pool, p) {
   return pool.filter((ex, i) => scores[i] <= best + 0.75);
 }
 
+function maxDifficultyFor(p) {
+  if (p.level === 'beg' && p.age < 18) return 1;
+  if (p.age < 18 || p.level === 'beg') return 2;
+  return 3;
+}
+
+function meetsExperienceGate(ex, p) {
+  const rank = LEVEL_RANK[p.level] ?? 0;
+  if (ADVANCED_ONLY.has(ex.id)) return rank >= 2 && p.age >= 18;
+  if (REQUIRES_FOUNDATION.has(ex.id)) return rank >= 1;
+  return true;
+}
+
 function isExerciseAllowed(ex, p) {
   if (!ex || !p) return false;
   const allowed = new Set(EQUIP_SETS[p.place] || EQUIP_SETS.gym);
   if (p.bar) allowed.add('pullupbar');
-  const fl = ageFlags(p.age);
-  const maxDiff = fl.teen ? 2 : p.level === 'beg' ? 2 : 3;
+  const limits = Array.isArray(p.limits) ? p.limits : [];
   const basic = (candidate) => allowed.has(candidate.eq)
-    && candidate.d <= maxDiff
-    && !(candidate.av || []).some((area) => p.limits.includes(area));
+    && candidate.d <= maxDifficultyFor(p)
+    && meetsExperienceGate(candidate, p)
+    && !(candidate.av || []).some((area) => limits.includes(area));
   if (!basic(ex)) return false;
   if (p.balance === 'support' && (ex.st || 0) >= 2) {
     const supported = EX.some((candidate) => candidate.p === ex.p && basic(candidate) && (candidate.st || 0) <= 1);
@@ -334,7 +358,6 @@ function buildPlan(pRaw) {
   const allowed = new Set(EQUIP_SETS[p.place] || EQUIP_SETS.gym);
   if (p.bar) allowed.add('pullupbar');
   const fl = ageFlags(p.age);
-  const maxDiff = fl.teen ? 2 : p.level === 'beg' ? 2 : 3;
   const usedWeek = new Set();
   let counter = 0;
 
@@ -347,11 +370,18 @@ function buildPlan(pRaw) {
     const why = [];
     const cut = (fn, text) => { const r = pool.filter(fn); if (r.length && r.length < pool.length) { pool = r; if (text) why.push(text); } else if (r.length) pool = r; };
 
-    let pool = EX.filter((e) => e.p === pattern && allowed.has(e.eq) && e.d <= maxDiff);
+    let pool = EX.filter((e) => e.p === pattern && allowed.has(e.eq));
     if (p.limits.length) {
       const before = pool.length;
       pool = pool.filter((e) => !(e.av || []).some((a) => p.limits.includes(a)));
       if (pool.length < before) why.push('обмеження (' + p.limits.map((l) => LIMIT_LABEL[l]).join(', ') + '): рухи з ризиком для цієї зони виключені');
+    }
+    const beforeReadiness = pool.length;
+    pool = pool.filter((e) => e.d <= maxDifficultyFor(p) && meetsExperienceGate(e, p));
+    if (pool.length < beforeReadiness) {
+      why.push(fl.teen && p.level === 'beg'
+        ? 'підліток-новачок: залишено рухи початкової складності з легкою прогресією навантаження'
+        : 'стаж: вправи, що потребують попередньої відносної сили або складного контролю, відкладено до наступного рівня');
     }
     if (p.balance === 'support') {
       cut((e) => (e.st || 0) <= 1, 'потрібна опора: рух із високою вимогою до рівноваги замінено стабільним');
@@ -745,11 +775,11 @@ function isProfileBuildable(profile) {
   return safe.mode === 'auto' || (safe.customDays.length === safe.days && safe.customDays.every((day) => day.groups.length > 0));
 }
 export {
-  JOINT_FRIENDLY, AXIAL_HEAVY, BALANCE, DAY_SLOTS, SPLITS, SEX,
+  JOINT_FRIENDLY, AXIAL_HEAVY, REQUIRES_FOUNDATION, ADVANCED_ONLY, BALANCE, DAY_SLOTS, SPLITS, SEX,
   GROUP_SLOTS, GROUP_WEIGHT, GROUP_CAP, customSlots, dayLabel,
   PRIORITY_PATTERN, FALLBACK, MACRO, LOADS, HEAVY_LOAD, round2, loadFor, isLoadable,
   REPS, VOLUME_TARGET, MUSCLE_CAP, PROGRESSION, ageFlags, stableBias,
-  exercisePreferenceScore, preferExercises, isExerciseAllowed,
+  exercisePreferenceScore, preferExercises, maxDifficultyFor, meetsExperienceGate, isExerciseAllowed,
   slotCount, baseSets, LAST_IN_DAY, orderScore, HEAVY_RANK, markHeavy, buildPlan,
   isHeavy, setsFor, rirFor, repsFor, tempoFor, restFor, targetFor, weeklyVolume,
   restSec, sessionMinutes, scheduleWarnings, frequency, techMarks, warmup,

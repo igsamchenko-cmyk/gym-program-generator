@@ -31,7 +31,7 @@ const uniLabel = (ex) => (ex.uni ? 'на кожну ' + (UNI_SIDE[ex.p] || 'ст
 
 
 const EQUIP_SETS = {
-  gym: ['barbell', 'dumbbell', 'machine', 'cable', 'band', 'bodyweight', 'pullupbar'],
+  gym: ['barbell', 'dumbbell', 'machine', 'cable', 'band', 'bodyweight', 'pullupbar', 'dipstation'],
   db: ['dumbbell', 'band', 'bodyweight'],
   band: ['band', 'bodyweight'],
   bw: ['bodyweight'],

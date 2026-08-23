@@ -290,7 +290,7 @@ const EX = [
   { id: 'low_high_fly', rg: 'chest_up', tp: '2-1-2', sd: 0, tech: 1, n: 'Зведення в кросовері знизу вгору', p: 'h_push', m: 'chest', s: [], eq: 'cable', t: 'iso', d: 1, st: 0,
     cue: 'Блоки внизу, руки по дузі вгору-всередину, кисті зустрічаються на рівні підборіддя. Мікропауза 1 сек угорі.',
     err: 'Завелика вага та інерція — ключична порція вимикається.', video: '' },
-  { id: 'weighted_dips', rg: 'chest_mid', tp: '3-0-2', sd: 2, tech: 0, n: 'Віджимання на брусах з вагою', p: 'h_push', m: 'chest', s: ['triceps'], eq: 'machine', t: 'comp', d: 2, st: 1, av: ['shoulder'],
+  { id: 'weighted_dips', rg: 'chest_mid', tp: '3-0-2', sd: 2, tech: 0, n: 'Віджимання на брусах з вагою', p: 'h_push', m: 'chest', s: ['triceps'], eq: 'dipstation', t: 'comp', d: 3, st: 2, av: ['shoulder'],
     cue: 'Нахил корпусу вперед для акценту на груди. Опускаєшся до кута 90°, плечі не завалюються вперед.',
     err: 'Надто глибоке опускання, вертикальний корпус при цілі «груди».', video: '' },
   { id: 'incline_fly', rg: 'chest_up', tp: '3-1-2', sd: 0, tech: 1, n: 'Розведення гантелей на нахилі 30°', p: 'h_push', m: 'chest', s: [], eq: 'dumbbell', t: 'iso', d: 2, st: 1, av: ['shoulder'],
