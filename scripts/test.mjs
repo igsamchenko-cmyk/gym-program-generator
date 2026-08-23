@@ -27,7 +27,7 @@ try {
   });
 
   const mediaExercises = EX.filter((ex) => ex.media);
-  equal(mediaExercises.length, 5, 'Pilot media library must cover five exercises');
+  equal(mediaExercises.length, 10, 'Exercise media library must cover ten exercises');
   equal(new Set(mediaExercises.map((ex) => ex.media.src)).size, mediaExercises.length, 'Exercise media paths must be unique');
   mediaExercises.forEach((ex) => {
     check(/^exercise-media\/[a-z0-9-]+\.webp$/.test(ex.media.src), 'Invalid media path on ' + ex.id);
