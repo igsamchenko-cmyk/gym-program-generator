@@ -485,14 +485,20 @@ const LIMIT_LABEL = { knee: 'коліна', lowback: 'поперек', shoulder:
 const LEVEL_LABEL = { beg: 'Новачок', int: 'Середній', adv: 'Просунутий' };
 const GOAL_LABEL = { hyper: 'Гіпертрофія', strength: 'Сила', fatloss: 'Зниження ваги', health: 'Здоров’я' };
 
-// суглобощадні варіанти — стають пріоритетними з віком
+// Варіанти з високою зовнішньою стабільністю та простим дозуванням навантаження.
+// Вік сам по собі не забороняє вільні ваги: ці вправи лише отримують перевагу,
+// коли ціль не вимагає специфічної навички зі штангою або клієнту потрібна опора.
 const JOINT_FRIENDLY = new Set(['seated_lat_raise', 'cable_lat_raise', 'ez_curl', 'db_hammer', 'vgrip_pulldown', 'hammer_row',
   'chest_row', 'machine_press', 'leg_press', 'hack_squat', 'rope_overhead', 'reverse_pecdeck', 'cable_face_pull', 'band_face_pull',
   'hyperext', 'seated_calf', 'db_incline', 'goblet', 'rdl_db', 'cable_row', 'lat_pulldown', 'machine_shoulder', 'leg_curl', 'leg_ext', 'low_high_fly']);
-// рухи з реальною ціною для суглобів після 35 — прибираємо, якщо є рівноцінна заміна
-const DEMANDING = new Set(['ohp', 'bb_curl', 'db_lat_raise', 'db_skull', 'bench_dips', 'pike_pushup', 'nordic', 'front_squat', 'deadlift', 'close_pushup', 'bw_lat_hold']);
-// висока осьова компресія хребта
+// Рухи з більшою вимогою до стабілізації тулуба. Це не список «небезпечних» вправ:
+// він потрібен лише для ранжування рівноцінних варіантів.
 const AXIAL_HEAVY = new Set(['bb_squat', 'front_squat', 'deadlift', 'rdl_bb', 'ohp', 'bb_row', 'band_gm']);
+const BALANCE = {
+  steady: { label: 'Стабільно', note: 'Повний вибір вправ відповідно до стажу й цілі.' },
+  cautious: { label: 'Іноді нестійко', note: 'Варіанти з опорою та тренажери отримають вищий пріоритет.' },
+  support: { label: 'Потрібна опора', note: 'Рухи з високою вимогою до рівноваги будуть замінені, якщо є рівноцінний стабільний варіант.' },
+};
 
 /* слот = патерн[@підспецифікація]; порядок у списку — чернетка, далі його впорядковує движок */
 const DAY_SLOTS = {
@@ -644,11 +650,59 @@ const PROGRESSION = {
 function ageFlags(age) {
   return {
     teen: age < 18,
-    cuff: age >= 30,        // прегаб обертової манжети
-    jointCare: age >= 35,   // нейтральні хвати, площина лопатки, тренажери замість вільної ваги в ізоляції
-    axialCap: age >= 40,    // зрізаємо осьову компресію хребта
-    longWarm: age >= 45,
+    midlife: age >= 35,
+    older: age >= 60,
+    cuff: age >= 50,
+    longWarm: age >= 50,
   };
+}
+
+function stableBias(p) {
+  let bias = p.age >= 60 ? 4 : p.age >= 50 ? 3 : p.age >= 35 ? 2 : 0;
+  if (p.level === 'beg') bias += 2;
+  if (p.balance === 'cautious') bias += 2;
+  if (p.balance === 'support') bias += 4;
+  // Для досвідченого силовика специфічність руху важливіша за зручність тренажера.
+  // Вік при цьому не є автоматичною забороною.
+  if (p.goal === 'strength' && p.level === 'adv' && p.balance === 'steady') bias = Math.max(0, bias - 3);
+  return bias;
+}
+
+function exercisePreferenceScore(ex, p) {
+  const bias = stableBias(p);
+  let score = 0;
+  if (bias > 0) {
+    score += (ex.st || 0) * bias;
+    score += Math.max(0, (ex.d || 1) - 1) * bias * 0.35;
+    if (JOINT_FRIENDLY.has(ex.id)) score -= bias * 0.55;
+    if (AXIAL_HEAVY.has(ex.id)) score += bias * 0.8;
+    if (ex.eq === 'machine' || ex.eq === 'cable') score -= bias * 0.35;
+  }
+
+  // Для загального здоров'я та гіпертрофії після 35 вибираємо вправи з таким
+  // самим тренувальним ефектом, але меншою технічною й системною ціною.
+  const generalMidlife = p.age >= 35 && !(p.goal === 'strength' && p.level === 'adv' && p.balance === 'steady');
+  if (generalMidlife) {
+    if (ex.id === 'hack_squat') score -= 5;
+    if (ex.id === 'leg_press') score -= 3;
+    if (ex.id === 'goblet') score -= 2;
+    if (ex.id === 'rdl_db') score -= 5;
+    if (ex.id === 'rdl_bb') score -= 3;
+    if (ex.id === 'hip_thrust') score -= 2;
+    if (ex.id === 'bb_squat') score += 4;
+    if (ex.id === 'front_squat') score += 3;
+    if (ex.id === 'deadlift') score += 5;
+  }
+
+  if (p.goal === 'strength' && p.level === 'adv' && p.balance === 'steady' && ex.eq === 'barbell' && ex.t === 'comp') score -= 3;
+  return score;
+}
+
+function preferExercises(pool, p) {
+  if (pool.length < 2) return pool;
+  const scores = pool.map((ex) => exercisePreferenceScore(ex, p));
+  const best = Math.min(...scores);
+  return pool.filter((ex, i) => scores[i] <= best + 0.75);
 }
 
 function isExerciseAllowed(ex, p) {
@@ -661,14 +715,9 @@ function isExerciseAllowed(ex, p) {
     && candidate.d <= maxDiff
     && !(candidate.av || []).some((area) => p.limits.includes(area));
   if (!basic(ex)) return false;
-  if (fl.axialCap && AXIAL_HEAVY.has(ex.id)) {
-    const safer = EX.some((candidate) => candidate.p === ex.p && basic(candidate) && !AXIAL_HEAVY.has(candidate.id));
-    if (safer) return false;
-  }
-  if (fl.jointCare && DEMANDING.has(ex.id)) {
-    const safer = EX.some((candidate) => candidate.p === ex.p && basic(candidate)
-      && (!fl.axialCap || !AXIAL_HEAVY.has(candidate.id)) && !DEMANDING.has(candidate.id));
-    if (safer) return false;
+  if (p.balance === 'support' && (ex.st || 0) >= 2) {
+    const supported = EX.some((candidate) => candidate.p === ex.p && basic(candidate) && (candidate.st || 0) <= 1);
+    if (supported) return false;
   }
   return true;
 }
@@ -786,10 +835,8 @@ function buildPlan(pRaw) {
       pool = pool.filter((e) => !(e.av || []).some((a) => p.limits.includes(a)));
       if (pool.length < before) why.push('обмеження (' + p.limits.map((l) => LIMIT_LABEL[l]).join(', ') + '): рухи з ризиком для цієї зони виключені');
     }
-    if (fl.axialCap) cut((e) => !AXIAL_HEAVY.has(e.id), 'вік ' + p.age + ': осьова компресія хребта зрізана');
-    if (fl.jointCare) {
-      cut((e) => !DEMANDING.has(e.id), 'вік ' + p.age + ': вимогливий для суглоба варіант замінено на щадніший');
-      if (pool.every((e) => e.t === 'iso')) cut((e) => JOINT_FRIENDLY.has(e.id), null);
+    if (p.balance === 'support') {
+      cut((e) => (e.st || 0) <= 1, 'потрібна опора: рух із високою вимогою до рівноваги замінено стабільним');
     }
     if (!pool.length) { const fb = FALLBACK[pattern]; return fb && depth < 2 ? pick(fb + (wantType ? '!' + wantType : ''), usedDay, depth + 1) : null; }
     if (wantRg) cut((e) => e.rg === wantRg, 'слот націлений на підспецифікацію «' + REGION[wantRg] + '»');
@@ -800,6 +847,12 @@ function buildPlan(pRaw) {
     const fresh = fd.filter((e) => !combo[e.p + ':' + e.rg]);
     pool = fresh.length ? fresh : fd;
     const fw = pool.filter((e) => !usedWeek.has(e.id)); if (fw.length) pool = fw;
+    const preferred = preferExercises(pool, p);
+    if (preferred.length < pool.length) {
+      const ageReason = p.age >= 35 ? 'вік ' + p.age + ' + ' : '';
+      why.push(ageReason + 'стаж, ціль і стабільність: обрано варіант із кращим співвідношенням стимулу до технічної втоми');
+      pool = preferred;
+    }
     if (depth > 0) why.push('прямого варіанту під цей слот немає в доступному інвентарі — взято найближчий патерн');
     reasonBuf = why;
     return pool[(counter++ + counterSeed) % pool.length];
@@ -818,7 +871,8 @@ function buildPlan(pRaw) {
     const score = (ex) => (ex.m === group ? 0 : 20)
       + (preferredPatterns.has(ex.p) ? preferredPatterns.get(ex.p) : 10)
       + (usedWeek.has(ex.id) ? 3 : 0)
-      + ((combo[ex.p + ':' + ex.rg] || 0) * 2);
+      + ((combo[ex.p + ':' + ex.rg] || 0) * 2)
+      + exercisePreferenceScore(ex, p);
     const bestScore = Math.min(...pool.map(score));
     const best = pool.filter((ex) => score(ex) === bestScore).sort((a, b) => a.id.localeCompare(b.id));
     reasonBuf = ['власна розкладка: рух гарантовано зберігає обрану групу «' + MUSCLE[group] + '»'];
@@ -1081,6 +1135,7 @@ function warmup(plan, day) {
 
   if (f.longWarm) out.push('5 хв загальної розминки + суглобова гімнастика');
   if (f.cuff && upper) out.push('Зовнішня ротація з гумкою 2×15–20 — профілактика обертової манжети, лікоть притиснутий');
+  if (f.older || plan.profile.balance !== 'steady') out.push('Баланс біля стійкої опори 2×20–30 с на ногу — без ризику падіння');
   if (plan.profile.sex === 'f' && (legs || hinge)) out.push('Відведення стегна з міні-резинкою 2×15 — активація середньої сідничної, контроль траєкторії коліна');
   if (plan.profile.limits.includes('knee') && legs) out.push('Розгинання ніг 1×20 з мінімальною вагою — прогріти колінний суглоб');
   if (plan.profile.limits.includes('lowback') && (hinge || legs)) out.push('Мертвий жук 2×8 на бік — увімкнути стабілізацію перед осьовими рухами');
@@ -1202,15 +1257,17 @@ function Header({ theme, onToggle }) {
   );
 }
 
-function ageNote(a) {
-  const f = ageFlags(a);
+function ageNote(p) {
+  const f = ageFlags(p.age);
   if (f.teen) return 'До 18: RIR не нижче 2, обсяг −20 %, технічно складні рухи прибрано, тест максимумів не призначається.';
   const on = [];
-  if (f.cuff) on.push('прегаб обертової манжети в розминці');
-  if (f.jointCare) on.push('нейтральні хвати й площина лопатки замість махів строго в сторони');
-  if (f.axialCap) on.push('осьова компресія хребта зрізана — гак і жим ногами замість штанги на спині');
+  if (f.midlife) on.push('для загального здоровʼя та гіпертрофії пріоритет мають гак, жим ногами, румунська тяга й рухи з опорою');
+  if (p.goal === 'strength' && p.level === 'adv' && p.balance === 'steady') on.push('досвід і силова ціль зберігають специфічні вправи зі штангою');
   if (f.longWarm) on.push('подовжена розминка');
-  return on.length ? 'Увімкнено: ' + on.join(', ') + '.' : 'Вікових обмежень немає — доступний повний арсенал вправ.';
+  if (f.older) on.push('у розминку додано безпечну роботу на баланс');
+  return on.length
+    ? 'Вік не є забороною сам по собі. Увімкнено: ' + on.join(', ') + '.'
+    : 'Вік не накладає автоматичних заборон; вибір визначають стаж, ціль, баланс і зазначені обмеження.';
 }
 
 function OptRow({ options, value, onChange, multi }) {
@@ -1285,7 +1342,13 @@ function Wizard({ p, set, onBuild }) {
             if (e.key === 'Enter') e.currentTarget.blur();
             if (e.key === 'Escape') { setAgeDraft(String(p.age)); e.currentTarget.blur(); }
           }} />
-        <div className="tk-hint">{ageNote(p.age)}</div>
+        <div className="tk-hint">{ageNote(p)}</div>
+      </div>
+
+      <div className="tk-field">
+        <span className="tk-lbl">Баланс і контроль руху</span>
+        <OptRow options={Object.entries(BALANCE).map(([k, v]) => [k, v.label])} value={p.balance} onChange={(v) => set({ balance: v })} />
+        <div className="tk-hint">{BALANCE[p.balance].note} Це точніший критерій вибору вправи, ніж паспортний вік.</div>
       </div>
 
       <div className="tk-field">
@@ -1494,7 +1557,7 @@ const STORAGE_VERSION = 2;
 const DEFAULT_PROFILE = {
   age: 39, sex: 'm', level: 'adv', days: 3, mode: 'auto',
   customDays: [{ groups: ['back', 'biceps'] }, { groups: ['chest', 'delts', 'triceps'] }, { groups: ['quads', 'hams', 'glutes', 'calves'] }],
-  place: 'gym', bar: true, goal: 'hyper', priority: ['back', 'chest'], limits: [],
+  place: 'gym', bar: true, goal: 'hyper', priority: ['back', 'chest'], limits: [], balance: 'steady',
   weekdays: [0, 2, 4], timeCap: null, fatigue: false, seed: 0,
 };
 const DEFAULT_WEEKDAYS = {
@@ -1506,6 +1569,7 @@ const PROFILE_VALUES = {
   mode: new Set(['auto', 'custom']),
   place: new Set(['gym', 'db', 'band', 'bw']),
   goal: new Set(['hyper', 'strength', 'fatloss', 'health']),
+  balance: new Set(Object.keys(BALANCE)),
   timeCap: new Set([45, 60, 75, 90]),
 };
 const cloneDefaultProfile = () => ({
@@ -1538,6 +1602,7 @@ function sanitizeProfile(saved) {
     place: PROFILE_VALUES.place.has(saved.place) ? saved.place : fallback.place,
     bar: typeof saved.bar === 'boolean' ? saved.bar : fallback.bar,
     goal: PROFILE_VALUES.goal.has(saved.goal) ? saved.goal : fallback.goal,
+    balance: PROFILE_VALUES.balance.has(saved.balance) ? saved.balance : fallback.balance,
     priority: saved.priority === undefined ? fallback.priority : uniqueAllowed(saved.priority, muscleKeys, 2),
     limits: uniqueAllowed(saved.limits, new Set(Object.keys(LIMIT_LABEL))),
     weekdays: uniqueAllowed(saved.weekdays, new Set([0, 1, 2, 3, 4, 5, 6]), days).sort((a, b) => a - b),
@@ -1936,7 +2001,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
           <div className="tk-rule"><b>Ліміт інтенсивних технік</b>Дроп-сети й часткові повтори в розтягнутій позиції — максимум 2 підходи на всю сесію, лише в ізоляції, ніколи в базових рухах. На делоад-тижнях прибрати повністю. За межею відмови втома росте швидше за стимул.</div>
           {profile.sex !== 'x' && <div className="tk-rule"><b>Поправка за статтю ({SEX[profile.sex].label})</b>{SEX[profile.sex].note}</div>}
           {profile.sex === 'f' && profile.age >= 45 && <div className="tk-rule"><b>Після 45</b>Силові з великою вагою — один із небагатьох інструментів, що впливають на щільність кісткової тканини. Це аргумент не знижувати ваги з віком, а зберігати важкі базові рухи в програмі, зменшуючи натомість обсяг допоміжної роботи.</div>}
-          {view.flags.jointCare && <div className="tk-rule"><b>Вікова поправка ({profile.age} р.)</b>{ageNote(profile.age)}</div>}
+          {(view.flags.midlife || profile.balance !== 'steady') && <div className="tk-rule"><b>Індивідуальний вибір вправ ({profile.age} р.)</b>{ageNote(profile)}</div>}
         </div>
 
         <p className="tk-foot">Це навчальний прототип, а не медична порада. Різкий біль, оніміння чи запаморочення — привід зупинити тренування й звернутися до лікаря.</p>

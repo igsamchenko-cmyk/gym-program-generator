@@ -43,6 +43,7 @@ try {
   equal(corrupt.age, DEFAULT_PROFILE.age, 'Invalid age falls back');
   equal(corrupt.days, 6, 'Days are clamped');
   equal(corrupt.level, DEFAULT_PROFILE.level, 'Invalid level falls back');
+  equal(corrupt.balance, 'steady', 'Missing or invalid balance falls back safely');
   check(corrupt.priority.join(',') === 'back', 'Priority is deduplicated and filtered');
   check(corrupt.limits.join(',') === 'knee', 'Limits are filtered');
   equal(corrupt.weekdays.length, 6, 'Weekdays are repaired to match days');
@@ -76,6 +77,38 @@ try {
       check(Object.values(volume).every(Number.isFinite), 'Volume values are finite');
       plansBuilt++;
     }
+  }
+
+  // Age changes preference, not eligibility: stable general-purpose lower-body
+  // variants win after 35, while an experienced strength athlete keeps specificity.
+  for (const age of [35, 45, 60, 70]) for (let seed = 0; seed < 30; seed++) {
+    const general = sanitizeProfile({
+      ...DEFAULT_PROFILE, age, level: 'adv', days: 3, place: 'gym',
+      goal: 'hyper', balance: 'steady', limits: [], seed,
+    });
+    const ids = new Set(buildPlan(general).days.flatMap((day) => day.items.map((item) => item.ex.id)));
+    check(!ids.has('bb_squat') && !ids.has('front_squat'), 'General 35+ profile should prefer stable squat variants');
+    check(!ids.has('deadlift'), 'General 35+ profile should prefer Romanian or supported hinge variants');
+    check(ids.has('hack_squat') || ids.has('leg_press') || ids.has('goblet'), 'General 35+ profile needs an efficient squat pattern');
+    check(ids.has('rdl_db') || ids.has('rdl_bb') || ids.has('hip_thrust') || ids.has('hyperext'), 'General 35+ profile needs an efficient hinge pattern');
+  }
+
+  for (const age of [35, 55, 70]) for (let seed = 0; seed < 20; seed++) {
+    const specific = sanitizeProfile({
+      ...DEFAULT_PROFILE, age, level: 'adv', days: 3, place: 'gym',
+      goal: 'strength', balance: 'steady', limits: [], seed,
+    });
+    const ids = new Set(buildPlan(specific).days.flatMap((day) => day.items.map((item) => item.ex.id)));
+    check(['bb_squat', 'front_squat', 'deadlift', 'rdl_bb'].some((id) => ids.has(id)), 'Experienced strength profile should retain barbell specificity');
+  }
+
+  for (const age of [39, 60, 70]) for (let seed = 0; seed < 20; seed++) {
+    const supported = sanitizeProfile({
+      ...DEFAULT_PROFILE, age, level: 'adv', days: 3, place: 'gym',
+      goal: 'strength', balance: 'support', limits: [], seed,
+    });
+    buildPlan(supported).days.flatMap((day) => day.items).forEach((item) =>
+      check((item.ex.st || 0) <= 1, 'Support-needed profile received a high-stability-demand exercise: ' + item.ex.id));
   }
 
   let cappedDays = 0;
@@ -151,7 +184,7 @@ try {
     customDays: [
       { groups: ['calves', 'quads', 'hams', 'core', 'glutes'] },
       { groups: ['glutes', 'core'] }, { groups: ['triceps', 'biceps'] },
-      { groups: ['core', 'quads', 'biceps', 'chest', 'delts', 'calves'] },
+      { groups: Object.keys(MUSCLE) },
       { groups: ['biceps'] },
     ],
   });
@@ -238,7 +271,7 @@ try {
   const conflictDays = renderer.root.findAll((node) => node.type === 'button' && node.props.className === 'tk-day');
   await act(async () => { conflictDays[3].props.onClick(); await flush(); });
   check(JSON.stringify(renderer.toJSON()).includes('Ліміт часу конфліктує з власною розкладкою'), 'Custom time conflict warning is rendered');
-  check(JSON.stringify(renderer.toJSON()).includes('60 хв'), 'Custom time conflict suggests the next viable cap');
+  check(/(?:60|75|90) хв|Без ліміту/.test(JSON.stringify(renderer.toJSON())), 'Custom time conflict suggests a viable larger cap');
   renderer.unmount();
 
   const ExcelJS = (await import('exceljs/dist/exceljs.min.js')).default;
