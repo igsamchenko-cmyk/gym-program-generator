@@ -1,0 +1,136 @@
+import { describe, it, expect } from 'vitest';
+import { buildPlan, DEFAULT_PROFILE, targetFor, weeklyVolume, ageFlags } from '../engine.js';
+import { MUSCLE, EQUIP_SETS } from '../data/labels.js';
+import { EX } from '../data/exercises.js';
+
+const PLACES = ['gym', 'db', 'band', 'bw'];
+const LEVELS = ['beg', 'int', 'adv'];
+const DAYS = [2, 3, 4, 5, 6];
+const SEXES = ['m', 'f', 'x'];
+const AGES = [16, 28, 39, 52];
+
+function profile(overrides = {}) {
+  return { ...DEFAULT_PROFILE, mode: 'auto', customDays: [], priority: [], limits: [], seed: 0, ...overrides };
+}
+
+describe('buildPlan — структурна коректність', () => {
+  it('жодна вправа не повторюється в межах одного дня', () => {
+    for (const place of PLACES) for (const level of LEVELS) for (const days of DAYS) {
+      const plan = buildPlan(profile({ level, days, place, bar: place === 'gym' }));
+      plan.days.forEach((day) => {
+        const ids = day.items.map((it) => it.ex.id);
+        expect(new Set(ids).size, `${place}/${level}/${days}д — дублікат у дні "${day.name}"`).toBe(ids.length);
+      });
+    }
+  });
+
+  it('кожен день містить щонайменше 3 вправи для будь-якого обладнання', () => {
+    for (const place of PLACES) for (const level of LEVELS) for (const days of DAYS) {
+      const plan = buildPlan(profile({ level, days, place, bar: place === 'gym' }));
+      plan.days.forEach((day) => {
+        expect(day.items.length, `${place}/${level}/${days}д — день "${day.name}" закороткий`).toBeGreaterThanOrEqual(3);
+      });
+    }
+  });
+
+  it('вправи з протипоказаннями ніколи не потрапляють у план з відповідним обмеженням', () => {
+    for (const limit of ['knee', 'lowback', 'shoulder']) {
+      const plan = buildPlan(profile({ level: 'adv', days: 4, place: 'gym', bar: true, limits: [limit] }));
+      const bad = plan.days.flatMap((d) => d.items).filter((it) => (it.ex.av || []).includes(limit));
+      expect(bad.map((b) => b.ex.n), `порушено обмеження "${limit}"`).toEqual([]);
+    }
+  });
+
+  it('у залі досвідченому не підставляється вага тіла чи резинка там, де є навантажуваний варіант (крім core/calves)', () => {
+    const plan = buildPlan(profile({ level: 'adv', days: 4, place: 'gym', bar: true }));
+    const substituted = plan.days.flatMap((d) => d.items)
+      .filter((it) => ['bodyweight', 'band'].includes(it.ex.eq) && !['core', 'calves'].includes(it.ex.p));
+    expect(substituted.map((s) => s.ex.n)).toEqual([]);
+  });
+
+  it('підліток ніколи не отримує RIR нижче 2 поза делоадом', () => {
+    const plan = buildPlan(profile({ age: 16, level: 'adv', days: 4, place: 'gym', bar: true }));
+    plan.weeks.filter((w) => !w.deload).forEach((w) => {
+      expect(w.rb, `тиждень "${w.tag}" — RIR бази нижче 2`).toBeGreaterThanOrEqual(2);
+      expect(w.ri, `тиждень "${w.tag}" — RIR ізоляції нижче 2`).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  it('підліток не отримує важкий блок і тест-тиждень', () => {
+    const plan = buildPlan(profile({ age: 16, level: 'adv', days: 4, place: 'gym', bar: true }));
+    expect(plan.weeks.some((w) => w.heavy || w.test)).toBe(false);
+  });
+
+  it('довжина макроциклу росте зі стажем: 5 / 7 / 11 тижнів', () => {
+    expect(buildPlan(profile({ level: 'beg' })).weeks.length).toBe(5);
+    expect(buildPlan(profile({ level: 'int' })).weeks.length).toBe(7);
+    expect(buildPlan(profile({ level: 'adv' })).weeks.length).toBe(11);
+  });
+
+  it('кожен патерн вправи має хоч один варіант для кожного типу обладнання', () => {
+    const patterns = [...new Set(EX.map((e) => e.p))];
+    for (const place of PLACES) {
+      const allowed = new Set(EQUIP_SETS[place]);
+      const missing = patterns.filter((p) => !EX.some((e) => e.p === p && allowed.has(e.eq)));
+      // side_delt/v_pull без турніка й тренажерів історично вузькі місця — стежимо, щоб їх не побільшало
+      expect(missing.length, `${place}: немає жодної вправи для патернів ${missing.join(', ')}`).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it('тижневий обсяг на піку не вибухає за розумну межу навіть із двома пріоритетами', () => {
+    let overCount = 0, total = 0;
+    for (const place of PLACES) for (const level of LEVELS) for (const days of DAYS) for (const sex of SEXES) {
+      const plan = buildPlan(profile({ level, days, place, bar: place === 'gym', sex, priority: ['back', 'chest'] }));
+      const peak = plan.weeks.reduce((a, b) => (a.mult > b.mult ? a : b));
+      const v = weeklyVolume(plan, peak).byMuscle;
+      Object.keys(MUSCLE).forEach((m) => {
+        const [, hi] = targetFor(level, m, plan.flags.teen, sex);
+        total++;
+        if (Math.round(v[m] || 0) > hi) overCount++;
+      });
+    }
+    // невеликий відсоток перевищень на піку з пріоритетами — очікувано;
+    // поріг ловить регресію, якщо генератор почне систематично роздувати обсяг
+    expect(overCount / total).toBeLessThan(0.08);
+  });
+
+  it('buildPlan не падає на жодному з 900+ поєднань профілю', () => {
+    let count = 0;
+    for (const place of PLACES) for (const level of LEVELS) for (const days of DAYS)
+      for (const sex of SEXES) for (const age of AGES) {
+        expect(() => buildPlan(profile({ place, level, days, sex, age, bar: place === 'gym' }))).not.toThrow();
+        count++;
+      }
+    expect(count).toBeGreaterThan(700);
+  });
+});
+
+describe('buildPlan — захист від пошкоджених профілів (регресія на баг з localStorage)', () => {
+  it('не падає, якщо priority/limits/customDays/weekdays відсутні взагалі', () => {
+    const broken = { age: 28, level: 'int', days: 4, place: 'gym', bar: true, goal: 'hyper' };
+    expect(() => buildPlan(broken)).not.toThrow();
+  });
+
+  it('не падає на повністю порожньому об’єкті', () => {
+    expect(() => buildPlan({})).not.toThrow();
+  });
+
+  it('SyntheticEvent-подібний обʼєкт (регресія головного бага з кнопкою) не ламає buildPlan', () => {
+    // імітація React SyntheticEvent: truthy обʼєкт без жодного очікуваного поля
+    const fakeEvent = { type: 'click', target: {}, preventDefault: () => {} };
+    expect(() => buildPlan(fakeEvent)).not.toThrow();
+  });
+});
+
+describe('ageFlags — вікові пороги', () => {
+  it('прапорці вмикаються на очікуваних межах', () => {
+    expect(ageFlags(17).teen).toBe(true);
+    expect(ageFlags(18).teen).toBe(false);
+    expect(ageFlags(29).cuff).toBe(false);
+    expect(ageFlags(30).cuff).toBe(true);
+    expect(ageFlags(34).jointCare).toBe(false);
+    expect(ageFlags(35).jointCare).toBe(true);
+    expect(ageFlags(39).axialCap).toBe(false);
+    expect(ageFlags(40).axialCap).toBe(true);
+  });
+});

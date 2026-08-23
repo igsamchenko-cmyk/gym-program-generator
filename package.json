@@ -8,7 +8,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node scripts/test.mjs"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "exceljs": "^4.4.0",
@@ -17,8 +18,8 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^6.1.0",
-    "react-test-renderer": "^18.3.1",
-    "vite": "^8.2.2"
+    "vite": "^8.2.2",
+    "vitest": "^4.1.11"
   },
   "overrides": {
     "uuid": "^11.1.1"
