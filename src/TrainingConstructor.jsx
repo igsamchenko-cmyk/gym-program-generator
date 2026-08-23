@@ -1151,9 +1151,13 @@ function warmup(plan, day) {
 const CSS = `
 .tk{--ink:#14181A;--surf:#E9EDEA;--card:#FFF;--steel:#66736F;--line:#D3D9D5;--deep:#2E2A72;--link:#2E2A72;--dl:#2FA090;--hot:#B4402F;
  --bar:#14181A;--bar-text:#EDF0EE;--bar-muted:#8A9B95;--alert:#FBEFEC;--alert-line:#E6C3B9;
- font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--surf);color:var(--ink);min-height:100vh;line-height:1.5;color-scheme:light;}
+ --fitness-bg:url('fitness-background-light.webp');
+ font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background-color:var(--surf);background-image:var(--fitness-bg);
+ background-repeat:no-repeat;background-position:center top;background-size:cover;background-attachment:fixed;
+ color:var(--ink);min-height:100vh;line-height:1.5;color-scheme:light;}
 .tk[data-theme="dark"]{--ink:#F1F5F3;--surf:#0B0E0D;--card:#151A18;--steel:#A8B4B0;--line:#303A36;--deep:#584FC5;--link:#AAA5FF;--dl:#4FC4B0;--hot:#E87360;
- --bar:#070908;--bar-text:#F1F5F3;--bar-muted:#93A29C;--alert:#2B1815;--alert-line:#704036;color-scheme:dark;}
+ --bar:#070908;--bar-text:#F1F5F3;--bar-muted:#93A29C;--alert:#2B1815;--alert-line:#704036;
+ --fitness-bg:url('fitness-background-dark.webp');color-scheme:dark;}
 .tk *{box-sizing:border-box;}
 .tk-bar{background:var(--bar);color:var(--bar-text);padding:18px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
 .tk-mark{font-family:'Arial Black','Segoe UI',system-ui,sans-serif;font-weight:700;font-size:17px;letter-spacing:-.02em;}
@@ -1244,6 +1248,7 @@ const CSS = `
 .tk-wd{font:inherit;font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;font-size:12px;width:42px;padding:8px 0;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:2px;cursor:pointer;}
 .tk-wd[aria-pressed="true"]{background:var(--deep);border-color:var(--deep);color:#fff;}
 .tk-rule b{display:block;font-size:11px;font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--steel);margin-bottom:3px;}
+@media (max-width:760px){.tk{background-position:left top;background-size:auto 100vh;background-attachment:scroll;}}
 @media (max-width:520px){.tk-volrow{grid-template-columns:92px 1fr 52px;}.tk-ramp{height:92px;}.tk-credit{right:8px;bottom:8px;padding:6px 9px;}.tk-credit strong{font-size:12px;}}
 @media (prefers-reduced-motion:reduce){.tk-wk span{transition:none;}}
 `;

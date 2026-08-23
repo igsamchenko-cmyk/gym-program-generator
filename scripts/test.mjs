@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import { createServer } from 'vite';
@@ -34,6 +34,12 @@ try {
     check(typeof ex.media.alt === 'string' && ex.media.alt.length >= 30, 'Exercise media needs descriptive alt text on ' + ex.id);
     check(existsSync(new URL('../public/' + ex.media.src, import.meta.url)), 'Missing exercise media file on ' + ex.id);
   });
+
+  for (const theme of ['light', 'dark']) {
+    const background = new URL('../public/fitness-background-' + theme + '.webp', import.meta.url);
+    check(existsSync(background), 'Missing ' + theme + ' fitness background');
+    check(statSync(background).size < 200000, 'Fitness background must stay below 200 KB: ' + theme);
+  }
 
   const corrupt = sanitizeProfile({
     age: 'abc', sex: 'bad', level: 'expert', days: 99, mode: 'custom',
