@@ -240,6 +240,7 @@ try {
   await act(async () => { renderer = TestRenderer.create(React.createElement(App)); await flush(); });
   const root = renderer.root;
   check(JSON.stringify(renderer.toJSON()).includes('developed by') && JSON.stringify(renderer.toJSON()).includes('Ihor Samchenko'), 'Developer credit is rendered');
+  check(JSON.stringify(renderer.toJSON()).includes('Повтори в запасі') && JSON.stringify(renderer.toJSON()).includes('Розвантаження'), 'Header terminology is clear Ukrainian');
   let ageInput = root.find((node) => node.type === 'input' && node.props.id === 'tk-age');
   await act(async () => { ageInput.props.onChange({ target: { value: '42' } }); });
   ageInput = root.find((node) => node.type === 'input' && node.props.id === 'tk-age');

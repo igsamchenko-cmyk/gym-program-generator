@@ -1258,7 +1258,7 @@ function Header({ theme, onToggle }) {
   return (
     <div className="tk-bar">
       <span className="tk-mark">Конструктор тренувань</span>
-      <span className="tk-sub">Макроцикл · RIR за SFR · делоад</span>
+      <span className="tk-sub">Макроцикл · Повтори в запасі · Розвантаження</span>
       <button type="button" className="tk-theme" aria-pressed={dark} onClick={onToggle}
         aria-label={dark ? 'Увімкнути світлу тему' : 'Увімкнути темну тему'}>
         {dark ? '☀ Світла тема' : '◐ Темна тема'}
