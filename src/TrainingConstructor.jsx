@@ -33,19 +33,19 @@ const storage = {
    ІНТЕРФЕЙС
    ============================================================ */
 const CSS = `
-.tk{--ink:#14181A;--surf:#E9EDEA;--card:#FFF;--steel:#66736F;--line:#D3D9D5;--deep:#2E2A72;--link:#2E2A72;--dl:#2FA090;--hot:#B4402F;
- --bar:#14181A;--bar-text:#EDF0EE;--bar-muted:#8A9B95;--alert:#FBEFEC;--alert-line:#E6C3B9;
+.tk{--ink:#14181A;--surf:#E9EDEA;--card:#FFF;--card-glass:rgba(255,255,255,.93);--card-dense:rgba(255,255,255,.96);--card-mobile:rgba(255,255,255,.96);--steel:#66736F;--line:#D3D9D5;--deep:#2E2A72;--link:#2E2A72;--dl:#2FA090;--hot:#B4402F;
+ --bar:#14181A;--bar-glass:rgba(20,24,26,.82);--bar-mobile:rgba(20,24,26,.94);--bar-text:#EDF0EE;--bar-muted:#8A9B95;--glass-line:rgba(255,255,255,.10);--alert:#FBEFEC;--alert-line:#E6C3B9;
  --fitness-bg:url('fitness-background-light.webp');--center-bg:url('fitness-center-light-v1.jpg');--center-tint:rgba(233,237,234,.28);--center-opacity:.48;--center-mobile-opacity:.26;--card-shadow:0 8px 28px rgba(28,36,32,.08);
  font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background-color:var(--surf);background-image:var(--fitness-bg);
  background-repeat:no-repeat;background-position:center top;background-size:cover;background-attachment:fixed;
  color:var(--ink);min-height:100vh;line-height:1.5;color-scheme:light;position:relative;isolation:isolate;}
-.tk[data-theme="dark"]{--ink:#F1F5F3;--surf:#0B0E0D;--card:#151A18;--steel:#A8B4B0;--line:#303A36;--deep:#584FC5;--link:#AAA5FF;--dl:#4FC4B0;--hot:#E87360;
- --bar:#070908;--bar-text:#F1F5F3;--bar-muted:#93A29C;--alert:#2B1815;--alert-line:#704036;
+.tk[data-theme="dark"]{--ink:#F1F5F3;--surf:#0B0E0D;--card:#151A18;--card-glass:rgba(21,26,24,.92);--card-dense:rgba(21,26,24,.95);--card-mobile:rgba(21,26,24,.96);--steel:#A8B4B0;--line:#303A36;--deep:#584FC5;--link:#AAA5FF;--dl:#4FC4B0;--hot:#E87360;
+ --bar:#070908;--bar-glass:rgba(7,9,8,.82);--bar-mobile:rgba(7,9,8,.94);--bar-text:#F1F5F3;--bar-muted:#93A29C;--glass-line:rgba(255,255,255,.08);--alert:#2B1815;--alert-line:#704036;
  --fitness-bg:url('fitness-background-dark.webp');--center-bg:url('fitness-center-dark-v1.jpg');--center-tint:rgba(6,9,8,.34);--center-opacity:.62;--center-mobile-opacity:.34;--card-shadow:0 10px 32px rgba(0,0,0,.20);color-scheme:dark;}
 .tk *{box-sizing:border-box;}
 .tk::before{content:"";position:fixed;z-index:0;pointer-events:none;top:0;bottom:0;left:50%;width:min(1040px,100vw);transform:translateX(-50%);background-image:linear-gradient(var(--center-tint),var(--center-tint)),var(--center-bg);background-repeat:no-repeat;background-position:center top;background-size:cover;opacity:var(--center-opacity);filter:saturate(.82) contrast(.94);mask-image:linear-gradient(90deg,transparent 0,#000 11%,#000 89%,transparent 100%);-webkit-mask-image:linear-gradient(90deg,transparent 0,#000 11%,#000 89%,transparent 100%);}
 .tk-bar,.tk-main{position:relative;z-index:1;}
-.tk-bar{background:var(--bar);color:var(--bar-text);padding:18px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+.tk-bar{background:var(--bar-glass);color:var(--bar-text);padding:18px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;border-bottom:1px solid var(--glass-line);backdrop-filter:blur(12px) saturate(.9);-webkit-backdrop-filter:blur(12px) saturate(.9);}
 .tk-mark{font-family:'Arial Black','Segoe UI',system-ui,sans-serif;font-weight:700;font-size:17px;letter-spacing:-.02em;}
 .tk-sub{font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;font-size:11px;color:var(--bar-muted);text-transform:uppercase;letter-spacing:.1em;}
 .tk-theme{font:inherit;font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;font-size:11px;color:var(--bar-text);background:transparent;border:1px solid var(--bar-muted);border-radius:2px;padding:7px 10px;cursor:pointer;margin-left:auto;}
@@ -57,7 +57,8 @@ const CSS = `
 .tk-credit span{font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;font-size:8px;text-transform:uppercase;letter-spacing:.12em;}
 .tk-credit strong{font-family:Georgia,'Times New Roman',serif;font-size:13px;font-style:italic;font-weight:600;letter-spacing:.01em;color:var(--ink);}
 .tk-main{max-width:900px;margin:0 auto;padding:20px 16px 64px;}
-.tk-card{background:var(--card);border:1px solid var(--line);border-radius:4px;padding:20px;margin-bottom:14px;box-shadow:var(--card-shadow);}
+.tk-card{background:var(--card-glass);border:1px solid var(--line);border-radius:4px;padding:20px;margin-bottom:14px;box-shadow:var(--card-shadow);backdrop-filter:blur(7px) saturate(.92);-webkit-backdrop-filter:blur(7px) saturate(.92);}
+.tk-card-dense{background:var(--card-dense);}
 .tk-eyebrow{font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--steel);margin-bottom:10px;}
 .tk-h{font-family:'Arial Black','Segoe UI',system-ui,sans-serif;font-weight:500;font-size:20px;letter-spacing:-.02em;margin:0 0 6px;}
 .tk-p{font-size:14px;color:var(--steel);margin:0 0 14px;}
@@ -143,7 +144,8 @@ const CSS = `
 .tk-wd{font:inherit;font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;font-size:12px;width:42px;padding:8px 0;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:2px;cursor:pointer;}
 .tk-wd[aria-pressed="true"]{background:var(--deep);border-color:var(--deep);color:#fff;}
 .tk-rule b{display:block;font-size:11px;font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--steel);margin-bottom:3px;}
-@media (max-width:760px){.tk{background-position:left top;background-size:auto 100vh;background-attachment:scroll;}.tk::before{width:100vw;opacity:var(--center-mobile-opacity);mask-image:none;-webkit-mask-image:none;background-position:center top;}}
+@media (max-width:760px){.tk{background-position:left top;background-size:auto 100vh;background-attachment:scroll;}.tk::before{width:100vw;opacity:var(--center-mobile-opacity);mask-image:none;-webkit-mask-image:none;background-position:center top;}.tk-bar{background:var(--bar-mobile);backdrop-filter:none;-webkit-backdrop-filter:none}.tk-card,.tk-card-dense{background:var(--card-mobile);backdrop-filter:none;-webkit-backdrop-filter:none}}
+@media (prefers-reduced-transparency:reduce){.tk-bar{background:var(--bar);backdrop-filter:none;-webkit-backdrop-filter:none}.tk-card,.tk-card-dense{background:var(--card);backdrop-filter:none;-webkit-backdrop-filter:none}}
 @media (max-width:520px){.tk-volrow{grid-template-columns:92px 1fr 52px;}.tk-ramp{height:92px;}.tk-credit{right:8px;bottom:8px;padding:6px 9px;}.tk-credit strong{font-size:12px;}.tk-warm-notes{grid-template-columns:1fr;}}
 @media (prefers-reduced-motion:reduce){.tk-wk span{transition:none;}}
 `;
@@ -286,7 +288,7 @@ function Wizard({ p, set, onBuild }) {
   const focusInfo = FOCUS[p.focus] || CUSTOM_FOCUS;
   const customReady = p.mode !== 'custom' || Array.from({ length: p.days }).every((_, i) => p.customDays[i] && p.customDays[i].groups.length);
   return (
-    <div className="tk-card">
+    <div className="tk-card tk-card-dense">
       <div className="tk-eyebrow">Крок 1 — параметри</div>
       <h2 className="tk-h">Розкажи про себе</h2>
       <p className="tk-p">Довжина макроциклу залежить від стажу: 5 тижнів для новачка, 7 для середнього рівня, 11 для просунутого.</p>
@@ -766,7 +768,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
           <p className="tk-p" style={{ marginBottom: 0 }}>{week.note}</p>
         </div>
 
-        <div className="tk-card">
+        <div className="tk-card tk-card-dense">
           <div className="tk-days">
             {view.days.map((d, i) => (
               <button key={i} className="tk-day" aria-pressed={i === day} onClick={() => setDay(i)}>{dayLabelFor(i)}{d.name}</button>
@@ -806,7 +808,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
 
         <VolumePanel plan={view} week={week} />
 
-        <div className="tk-card">
+        <div className="tk-card tk-card-dense">
           <div className="tk-eyebrow">Правила блоку</div>
           <div className="tk-rule"><b>RIR розділено за SFR</b>Базові рухи — {week.rb}, ізоляція — {week.ri}. Підхід присідів до відмови коштує системної втоми в рази більше за підхід махів, а стимулу додає непропорційно мало. Втома переноситься туди, де вона дешева.</div>
           <div className="tk-rule"><b>Одна змінна за раз</b>У межах тижня росте АБО обсяг, АБО близькість до відмови — ніколи разом. Дві змінні одночасно не дають зрозуміти, що спрацювало, і подвоюють вартість втоми.</div>

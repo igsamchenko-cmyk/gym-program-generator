@@ -28,6 +28,10 @@ describe('акцент програми та особисті виключенн
     expect(html).toContain('.tk::before');
     expect(html).toContain('fitness-center-light-v1.jpg');
     expect(html).toContain('fitness-center-dark-v1.jpg');
+    expect(html).toContain('--bar-glass:rgba(20,24,26,.82)');
+    expect(html).toContain('backdrop-filter:blur(12px)');
+    expect(html).toContain('prefers-reduced-transparency:reduce');
+    expect(html).toContain('tk-card tk-card-dense');
   });
 
   it('жіночий стартовий профіль видимий, а старі збережені дані мігрують без втрат', () => {
