@@ -25,9 +25,9 @@ describe('акцент програми та особисті виключенн
     expect(html).toContain('Сідниці та стегна');
     expect(html).toContain('Не хочу виконувати');
     expect(html).toContain('Вправи на підлозі');
-    expect(html).toContain('.tk-main::before');
-    expect(html).toContain('backdrop-filter:blur(9px)');
-    expect(html).toContain('prefers-reduced-transparency:reduce');
+    expect(html).toContain('.tk::before');
+    expect(html).toContain('fitness-center-light-v1.jpg');
+    expect(html).toContain('fitness-center-dark-v1.jpg');
   });
 
   it('жіночий стартовий профіль видимий, а старі збережені дані мігрують без втрат', () => {
