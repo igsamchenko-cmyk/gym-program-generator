@@ -153,17 +153,19 @@ const CSS = `
 function Header({ theme, onToggle }) {
   const dark = theme === 'dark';
   return (
-    <div className="tk-bar">
-      <span className="tk-mark">Конструктор тренувань</span>
-      <span className="tk-sub">Макроцикл · Повтори в запасі · Розвантаження</span>
-      <button type="button" className="tk-theme" aria-pressed={dark} onClick={onToggle}
-        aria-label={dark ? 'Увімкнути світлу тему' : 'Увімкнути темну тему'}>
-        {dark ? '☀ Світла тема' : '◐ Темна тема'}
-      </button>
+    <>
+      <div className="tk-bar">
+        <span className="tk-mark">Конструктор тренувань</span>
+        <span className="tk-sub">Макроцикл · Повтори в запасі · Розвантаження</span>
+        <button type="button" className="tk-theme" aria-pressed={dark} onClick={onToggle}
+          aria-label={dark ? 'Увімкнути світлу тему' : 'Увімкнути темну тему'}>
+          {dark ? '☀ Світла тема' : '◐ Темна тема'}
+        </button>
+      </div>
       <div className="tk-credit" aria-label="Developed by Ihor Samchenko">
         <span>developed by</span><strong>Ihor Samchenko</strong>
       </div>
-    </div>
+    </>
   );
 }
 

@@ -32,6 +32,7 @@ describe('акцент програми та особисті виключенн
     expect(html).toContain('backdrop-filter:blur(12px)');
     expect(html).toContain('prefers-reduced-transparency:reduce');
     expect(html).toContain('tk-card tk-card-dense');
+    expect(html).toMatch(/class="tk-bar"[\s\S]*?<\/button><\/div><div class="tk-credit"/);
   });
 
   it('жіночий стартовий профіль видимий, а старі збережені дані мігрують без втрат', () => {
