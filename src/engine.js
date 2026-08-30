@@ -58,21 +58,23 @@ const DAY_SLOTS = {
   fbA: ['squat', 'h_push@chest_mid', 'h_pull@back_thick', 'hinge', 'side_delt', 'triceps', 'calves@calf_gastro', 'core', 'quad_iso'],
   fbB: ['hinge', 'h_push@chest_up!comp', 'v_pull@back_width', 'lunge', 'h_push@chest_up!iso', 'rear_delt', 'biceps', 'calves@calf_soleus', 'core'],
   fbC: ['squat', 'v_push', 'v_pull@back_low', 'h_pull@back_thick', 'side_delt', 'v_pull@back_width!iso', 'triceps', 'biceps', 'core'],
+  fbD: ['hinge', 'h_push@chest_mid', 'h_pull@back_thick', 'lunge', 'v_push', 'rear_delt', 'biceps', 'calves@calf_gastro', 'core'],
   upper: ['h_push@chest_mid', 'v_pull@back_width', 'v_push', 'h_pull@back_thick', 'side_delt', 'triceps', 'biceps', 'rear_delt'],
   lower: ['squat', 'hinge', 'lunge', 'quad_iso', 'ham_iso', 'calves@calf_gastro', 'core', 'glute_iso'],
   push: ['h_push@chest_mid', 'v_push', 'h_push@chest_up', 'side_delt', 'triceps@tri_long', 'core', 'triceps'],
   pull: ['v_pull@back_width', 'h_pull@back_thick', 'v_pull@back_low', 'rear_delt', 'biceps', 'core', 'biceps'],
   legs: ['squat', 'hinge', 'lunge', 'quad_iso', 'ham_iso', 'glute_iso', 'calves@calf_soleus', 'core'],
 };
-const DAY_NAME = { fbA: 'Фулбоді A', fbB: 'Фулбоді B', fbC: 'Фулбоді C', upper: 'Верх тіла', lower: 'Низ тіла', push: 'Жимовий', pull: 'Тяговий', legs: 'Ноги' };
+const DAY_NAME = { fbA: 'Фулбоді A', fbB: 'Фулбоді B', fbC: 'Фулбоді C', fbD: 'Фулбоді D', upper: 'Верх тіла', lower: 'Низ тіла', push: 'Жимовий', pull: 'Тяговий', legs: 'Ноги' };
 const SPLITS = { 2: ['fbA', 'fbB'], 3: ['fbA', 'fbB', 'fbC'], 4: ['upper', 'lower', 'upper', 'lower'], 5: ['upper', 'lower', 'push', 'pull', 'legs'], 6: ['push', 'pull', 'legs', 'push', 'pull', 'legs'] };
-const SPLIT_NOTE = {
-  2: 'Два фулбоді-дні: основні рухи повторюються двічі, а менші групи розподіляються між днями й частково працюють як синергісти.',
-  3: 'Три фулбоді з різними акцентами. Робоча схема на будь-якому стажі, якщо обсяг рознесено рівно по днях.',
-  4: 'Верх / низ двічі. Найкращий баланс частоти й обсягу для середнього рівня.',
-  5: 'Верх і низ на початку тижня, далі жим / тяга / ноги.',
-  6: 'Push-Pull-Legs двічі. Потребує стабільного сну й графіка.',
-};
+const FULLBODY_SPLITS = { 2: ['fbA', 'fbB'], 3: ['fbA', 'fbB', 'fbC'], 4: ['fbA', 'fbB', 'fbC', 'fbD'] };
+const BODY_PART_SPLITS = { 3: ['push', 'pull', 'legs'], 4: ['upper', 'lower', 'upper', 'lower'], 5: ['upper', 'lower', 'push', 'pull', 'legs'], 6: ['push', 'pull', 'legs', 'push', 'pull', 'legs'] };
+
+function splitForProfile(p) {
+  if (p.programStyle === 'fullbody' && FULLBODY_SPLITS[p.days]) return FULLBODY_SPLITS[p.days];
+  if (p.programStyle === 'split' && BODY_PART_SPLITS[p.days]) return BODY_PART_SPLITS[p.days];
+  return SPLITS[p.days];
+}
 /* Стать змінює три речі, і кожна спирається на дані, а не на звичку:
    1) стелю обсягу — при однаковому відсотку від максимуму жінки в середньому стійкіші до втоми
       й швидше відновлюються між підходами, тому низ тіла витримує більше робочих підходів;
@@ -390,7 +392,10 @@ function ensureWeeklySlot(selected, defs, pattern, protectedPatterns) {
    ГЕНЕРАТОР
    ============================================================ */
 function slotCount(level, type, days) {
-  if (type.startsWith('fb')) return level === 'beg' ? 5 : level === 'int' ? 6 : 9;
+  if (type.startsWith('fb')) {
+    if (days >= 4) return level === 'beg' ? 4 : level === 'int' ? 5 : 6;
+    return level === 'beg' ? 5 : level === 'int' ? 6 : 9;
+  }
   if (days >= 6) return level === 'adv' ? 6 : 5;
   if (days === 5) return level === 'adv' ? 7 : 6;
   return level === 'beg' ? 5 : level === 'int' ? 6 : 7;
@@ -506,7 +511,7 @@ function buildPlan(pRaw) {
     ? p.customDays.slice(0, p.days).map((d) => ({
         type: 'custom', name: d.name || dayLabel(d.groups), full: customSlots(d.groups, p), requestedGroups: d.groups.slice(),
       }))
-    : SPLITS[p.days].map((t) => ({ type: t, name: DAY_NAME[t], full: DAY_SLOTS[t], requestedGroups: [] }));
+    : splitForProfile(p).map((t) => ({ type: t, name: DAY_NAME[t], full: DAY_SLOTS[t], requestedGroups: [] }));
   const selectedSlots = defs.map((def, dayIndex) => def.type === 'custom'
     ? def.full.slice()
     : balancedSlots(def.full, slotCount(p.level, def.type, p.days), dayIndex, p.seed));
@@ -835,7 +840,7 @@ function warmup(plan, day) {
 }
 
 const DEFAULT_PROFILE = {
-  age: 39, sex: 'm', level: 'adv', days: 3, mode: 'auto',
+  age: 39, sex: 'm', level: 'adv', days: 3, mode: 'auto', programStyle: 'auto',
   customDays: [{ groups: ['back', 'biceps'] }, { groups: ['chest', 'delts', 'triceps'] }, { groups: ['quads', 'hams', 'glutes', 'calves'] }],
   place: 'gym', bar: true, goal: 'hyper', focus: 'upper', priority: ['back', 'chest'], avoid: [], limits: [], balance: 'steady',
   weekdays: [0, 2, 4], timeCap: null, fatigue: false, seed: 0,
@@ -847,6 +852,7 @@ const PROFILE_VALUES = {
   sex: new Set(['m', 'f', 'x']),
   level: new Set(['beg', 'int', 'adv']),
   mode: new Set(['auto', 'custom']),
+  programStyle: new Set(['auto', 'fullbody', 'split']),
   place: new Set(['gym', 'db', 'band', 'bw']),
   goal: new Set(['hyper', 'strength', 'fatloss', 'health']),
   focus: new Set([...Object.keys(FOCUS), 'custom']),
@@ -884,6 +890,7 @@ function sanitizeProfile(saved) {
     level: PROFILE_VALUES.level.has(saved.level) ? saved.level : fallback.level,
     days,
     mode: PROFILE_VALUES.mode.has(saved.mode) ? saved.mode : fallback.mode,
+    programStyle: PROFILE_VALUES.programStyle.has(saved.programStyle) ? saved.programStyle : fallback.programStyle,
     place: PROFILE_VALUES.place.has(saved.place) ? saved.place : fallback.place,
     bar: typeof saved.bar === 'boolean' ? saved.bar : fallback.bar,
     goal: PROFILE_VALUES.goal.has(saved.goal) ? saved.goal : fallback.goal,
@@ -898,6 +905,7 @@ function sanitizeProfile(saved) {
     seed: safeInteger(saved.seed, 0, 0, 1000000),
     customDays: [],
   };
+  if ((safe.programStyle === 'fullbody' && days > 4) || (safe.programStyle === 'split' && days < 3)) safe.programStyle = 'auto';
   if (safe.weekdays.length !== days) safe.weekdays = DEFAULT_WEEKDAYS[days].slice();
   const sourceDays = Array.isArray(saved.customDays) ? saved.customDays : [];
   safe.customDays = Array.from({ length: days }, (_, i) => {
@@ -913,7 +921,7 @@ function isProfileBuildable(profile) {
   return safe.mode === 'auto' || (safe.customDays.length === safe.days && safe.customDays.every((day) => day.groups.length > 0));
 }
 export {
-  JOINT_FRIENDLY, AXIAL_HEAVY, REQUIRES_FOUNDATION, ADVANCED_ONLY, BALANCE, FOCUS, CUSTOM_FOCUS, AVOID, DAY_SLOTS, SPLITS, SEX,
+  JOINT_FRIENDLY, AXIAL_HEAVY, REQUIRES_FOUNDATION, ADVANCED_ONLY, BALANCE, FOCUS, CUSTOM_FOCUS, AVOID, DAY_SLOTS, SPLITS, FULLBODY_SPLITS, BODY_PART_SPLITS, splitForProfile, SEX,
   GROUP_SLOTS, GROUP_WEIGHT, GROUP_CAP, customSlots, dayLabel,
   PRIORITY_PATTERN, FALLBACK, MACRO, LOADS, HEAVY_LOAD, round2, loadFor, isLoadable,
   REPS, VOLUME_TARGET, MUSCLE_CAP, PROGRESSION, ageFlags, stableBias,

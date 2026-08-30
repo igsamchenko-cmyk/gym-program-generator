@@ -67,7 +67,28 @@ const SPLIT_NOTE = {
   6: 'Push-Pull-Legs двічі. Потребує стабільного сну й графіка.',
 };
 
+const PROGRAM_STYLE_LABEL = { auto: 'Підібрати автоматично', fullbody: 'Фулбоді', split: 'Спліт' };
+
+const PROGRAM_STYLE_NOTE = {
+  fullbody: {
+    2: 'Два фулбоді-дні: усе тіло працює двічі на тиждень.',
+    3: 'Три фулбоді-дні з різними акцентами та рівномірним тижневим обсягом.',
+    4: 'Чотири коротші фулбоді-сесії: вища частота, але менше вправ за одне тренування.',
+  },
+  split: {
+    3: 'Push / Pull / Legs: жимовий день, тяговий день і ноги.',
+    4: 'Верх / низ двічі на тиждень: кожна велика група отримує дві сесії.',
+    5: 'Верх / низ, потім Push / Pull / Legs — поширений комбінований спліт.',
+    6: 'Push / Pull / Legs двічі на тиждень. Потребує стабільного відновлення.',
+  },
+};
+
+const programStyleNote = (style, days) => style === 'auto'
+  ? SPLIT_NOTE[days]
+  : (PROGRAM_STYLE_NOTE[style] && PROGRAM_STYLE_NOTE[style][days]) || SPLIT_NOTE[days];
+
 export {
   REGION, REGION_GROUP, MUSCLE, UNI_SIDE, uniLabel, EQUIP_SETS, PLACE_LABEL,
   WEEKDAYS, SLOW_RECOVERY, LIMIT_LABEL, LEVEL_LABEL, GOAL_LABEL, DAY_NAME, SPLIT_NOTE,
+  PROGRAM_STYLE_LABEL, PROGRAM_STYLE_NOTE, programStyleNote,
 };

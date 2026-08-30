@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef, Component } from "react";
 import { EX } from './data/exercises.js';
 import {
   REGION, REGION_GROUP, MUSCLE, UNI_SIDE, uniLabel, EQUIP_SETS,
-  PLACE_LABEL, WEEKDAYS, LEVEL_LABEL, GOAL_LABEL, SPLIT_NOTE,
+  PLACE_LABEL, WEEKDAYS, LEVEL_LABEL, GOAL_LABEL, PROGRAM_STYLE_LABEL, programStyleNote,
 } from './data/labels.js';
 import {
   SEX, BALANCE, FOCUS, CUSTOM_FOCUS, AVOID, GROUP_CAP, dayLabel, focusForPriority, loadFor, isLoadable, PROGRESSION, ageFlags, isExerciseAllowed,
@@ -354,7 +354,8 @@ function Wizard({ p, set, onBuild }) {
     // за межами нової кількості — обрізаємо; при збільшенні добудовуємо порожніми.
     const weekdays = p.weekdays.slice(0, n);
     const customDays = Array.from({ length: n }).map((_, i) => p.customDays[i] || { groups: [] });
-    set({ days: n, weekdays, customDays });
+    const programStyle = (p.programStyle === 'fullbody' && n > 4) || (p.programStyle === 'split' && n < 3) ? 'auto' : p.programStyle;
+    set({ days: n, weekdays, customDays, programStyle });
   };
   const toggleDay = (i) => {
     let w = p.weekdays.includes(i) ? p.weekdays.filter((x) => x !== i) : [...p.weekdays, i];
@@ -413,14 +414,26 @@ function Wizard({ p, set, onBuild }) {
       <div className="tk-field">
         <span className="tk-lbl">Днів на тиждень</span>
         <OptRow options={[['2', '2'], ['3', '3'], ['4', '4'], ['5', '5'], ['6', '6']]} value={String(p.days)} onChange={(v) => setDays(Number(v))} />
-        <div className="tk-hint">{p.mode === 'auto' ? SPLIT_NOTE[p.days] : 'Стільки днів ти й налаштуєш нижче.'}</div>
+        <div className="tk-hint">Обирай кількість днів, яку реально зможеш підтримувати щотижня.</div>
       </div>
 
       <div className="tk-field">
-        <span className="tk-lbl">Розкладка</span>
-        <OptRow options={[['auto', 'Готова під кількість днів'], ['custom', 'Власна']]} value={p.mode} onChange={(v) => set({ mode: v })} />
-        <div className="tk-hint">{p.mode === 'auto' ? SPLIT_NOTE[p.days] : 'Обери групи для кожного дня. Слоти всередині дня розподіляються за розміром групи, а порядок вправ і підспецифікації рахує той самий движок, що й у готових шаблонах.'}</div>
+        <span className="tk-lbl">Як скласти програму</span>
+        <OptRow options={[['auto', 'Готова програма'], ['custom', 'Налаштувати дні вручну']]} value={p.mode} onChange={(v) => set({ mode: v })} />
+        <div className="tk-hint">{p.mode === 'auto' ? 'Застосунок розподілить вправи й обсяг за вибраним форматом.' : 'Обери групи для кожного дня. Слоти всередині дня розподіляються за розміром групи, а порядок вправ і підспецифікації рахує той самий движок, що й у готових шаблонах.'}</div>
       </div>
+
+      {p.mode === 'auto' && (
+        <div className="tk-field">
+          <span className="tk-lbl">Формат тренувань</span>
+          <OptRow options={[
+            ['auto', PROGRAM_STYLE_LABEL.auto],
+            ...(p.days <= 4 ? [['fullbody', PROGRAM_STYLE_LABEL.fullbody]] : []),
+            ...(p.days >= 3 ? [['split', PROGRAM_STYLE_LABEL.split]] : []),
+          ]} value={p.programStyle} onChange={(programStyle) => set({ programStyle })} />
+          <div className="tk-hint">{programStyleNote(p.programStyle, p.days)}</div>
+        </div>
+      )}
 
       {p.mode === 'custom' && (
         <div className="tk-field">
@@ -931,7 +944,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
           <div className="tk-chips">
             <span className="tk-chip">{profile.age} р.</span>
             {profile.sex !== 'x' && <span className="tk-chip">{SEX[profile.sex].label}</span>}
-            <span className="tk-chip">{profile.mode === 'custom' ? 'Власна розкладка' : 'Готова розкладка'}</span>
+            <span className="tk-chip">{profile.mode === 'custom' ? 'Власна розкладка' : profile.programStyle === 'auto' ? 'Формат: авто' : PROGRAM_STYLE_LABEL[profile.programStyle]}</span>
             <span className="tk-chip">{LEVEL_LABEL[profile.level]}</span>
             <span className="tk-chip">{profile.days} дн/тиж</span>
             <span className="tk-chip">{PLACE_LABEL[profile.place]}</span>

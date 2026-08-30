@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildPlan, DEFAULT_PROFILE } from '../engine.js';
+import { buildPlan, DEFAULT_PROFILE, frequency, sanitizeProfile, splitForProfile } from '../engine.js';
 import { EX } from '../data/exercises.js';
 
 function profile(overrides = {}) {
@@ -68,5 +68,40 @@ describe('регресія: setDays синхронізує weekdays/customDays (
   it('weekdays довший за days не ламає buildPlan — рахуються лише перші days елементів там, де потрібно', () => {
     const p = profile({ days: 2, weekdays: [0, 1, 2, 3, 4] }); // штучно "забруднений" стан
     expect(() => buildPlan(p)).not.toThrow();
+  });
+});
+
+describe('формат готової програми', () => {
+  it('фулбоді та спліт використовують очікувані поширені шаблони', () => {
+    const cases = [
+      ['fullbody', 2, ['fbA', 'fbB']],
+      ['fullbody', 3, ['fbA', 'fbB', 'fbC']],
+      ['fullbody', 4, ['fbA', 'fbB', 'fbC', 'fbD']],
+      ['split', 3, ['push', 'pull', 'legs']],
+      ['split', 4, ['upper', 'lower', 'upper', 'lower']],
+      ['split', 5, ['upper', 'lower', 'push', 'pull', 'legs']],
+      ['split', 6, ['push', 'pull', 'legs', 'push', 'pull', 'legs']],
+    ];
+    cases.forEach(([programStyle, days, expected]) => {
+      const p = profile({ programStyle, days, level: 'adv', place: 'gym', bar: true });
+      expect(splitForProfile(sanitizeProfile(p))).toEqual(expected);
+      const plan = buildPlan(p);
+      expect(plan.days.map((day) => day.type)).toEqual(expected);
+      plan.days.forEach((day) => expect(day.items.length, `${programStyle}/${days}: ${day.name}`).toBeGreaterThanOrEqual(4));
+      if (programStyle === 'fullbody') {
+        const weeklyFrequency = frequency(plan);
+        ['quads', 'hams', 'chest', 'back'].forEach((muscle) => {
+          expect(weeklyFrequency[muscle], `${programStyle}/${days}: ${muscle}`).toBeGreaterThanOrEqual(2);
+        });
+      }
+    });
+  });
+
+  it('несумісний або старий формат безпечно переходить в автоматичний режим', () => {
+    expect(sanitizeProfile(profile({ days: 2, programStyle: 'split' })).programStyle).toBe('auto');
+    expect(sanitizeProfile(profile({ days: 5, programStyle: 'fullbody' })).programStyle).toBe('auto');
+    const legacy = { ...profile({ days: 4 }) };
+    delete legacy.programStyle;
+    expect(sanitizeProfile(legacy).programStyle).toBe('auto');
   });
 });

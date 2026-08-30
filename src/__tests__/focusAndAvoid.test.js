@@ -23,6 +23,10 @@ describe('акцент програми та особисті виключенн
     const html = renderToStaticMarkup(createElement(TrainingConstructor));
     expect(html).toContain('Акцент програми');
     expect(html).toContain('Сідниці та стегна');
+    expect(html).toContain('Формат тренувань');
+    expect(html).toContain('Підібрати автоматично');
+    expect(html).toContain('Фулбоді');
+    expect(html).toContain('Спліт');
     expect(html).toContain('Виключити з програми');
     expect(html).toContain('Без виключень');
     expect(html).toContain('Необов’язково');
