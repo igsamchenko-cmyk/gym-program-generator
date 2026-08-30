@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import TrainingConstructor from '../TrainingConstructor.jsx';
+import TrainingConstructor, { HomeEquipmentPanel } from '../TrainingConstructor.jsx';
 import {
   AVOID, FOCUS, SEX, DEFAULT_PROFILE,
   buildPlan, frequency, isAvoidedExercise, isExerciseAllowed, sanitizeProfile,
@@ -39,6 +39,19 @@ describe('акцент програми та особисті виключенн
     expect(html).toContain('prefers-reduced-transparency:reduce');
     expect(html).toContain('tk-card tk-card-dense');
     expect(html).toMatch(/class="tk-bar"[\s\S]*?<\/button><\/div><div class="tk-credit"/);
+  });
+
+  it('домашнє обладнання можна поєднувати, а рекомендації містять безпечні заміни', () => {
+    const html = renderToStaticMarkup(createElement(HomeEquipmentPanel, { value: ['dumbbell', 'band'] }));
+    expect(html).toContain('Що є вдома');
+    expect(html).toContain('Гантелі');
+    expect(html).toContain('Резинки');
+    expect(html).toContain('Вага тіла');
+    expect(html).toContain('доступна завжди');
+    expect(html).toContain('Що стане у пригоді вдома');
+    expect(html).toContain('рюкзак');
+    expect(html).toContain('стільці на колесах');
+    expect(html.match(/aria-pressed="true"/g)).toHaveLength(2);
   });
 
   it('жіночий стартовий профіль видимий, а старі збережені дані мігрують без втрат', () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildPlan, DEFAULT_PROFILE, targetFor, weeklyVolume, ageFlags } from '../engine.js';
+import { buildPlan, DEFAULT_PROFILE, targetFor, weeklyVolume, ageFlags, allowedEquipmentFor } from '../engine.js';
 import { MUSCLE, EQUIP_SETS } from '../data/labels.js';
 import { EX } from '../data/exercises.js';
 
@@ -14,6 +14,13 @@ function profile(overrides = {}) {
 }
 
 describe('buildPlan — структурна коректність', () => {
+  it('домашні типи обладнання поєднуються, а вага тіла лишається доступною завжди', () => {
+    const allowed = allowedEquipmentFor(profile({ place: 'home', homeEquipment: ['dumbbell', 'band'] }));
+    expect([...allowed].sort()).toEqual(['band', 'bodyweight', 'dumbbell']);
+    expect(allowed.has('barbell')).toBe(false);
+    expect(allowed.has('pullupbar')).toBe(false);
+  });
+
   it('жодна вправа не повторюється в межах одного дня', () => {
     for (const place of PLACES) for (const level of LEVELS) for (const days of DAYS) {
       const plan = buildPlan(profile({ level, days, place, bar: place === 'gym' }));

@@ -33,4 +33,17 @@ describe('sanitizeProfile — захист від застарілого про�
     expect(safe.customDays.every((d) => Array.isArray(d.groups))).toBe(true);
     expect(safe.customDays[2].groups).toEqual(['back']);
   });
+
+  it('старі домашні режими мігрують у комбінований вибір обладнання', () => {
+    expect(sanitizeProfile({ place: 'db', bar: true }).homeEquipment).toEqual(['dumbbell', 'band', 'pullupbar']);
+    expect(sanitizeProfile({ place: 'band', bar: false }).homeEquipment).toEqual(['band']);
+    expect(sanitizeProfile({ place: 'bw', bar: false }).homeEquipment).toEqual([]);
+    expect(sanitizeProfile({ place: 'db' }).place).toBe('home');
+  });
+
+  it('новий домашній профіль прибирає невідоме обладнання й дублікати', () => {
+    const safe = sanitizeProfile({ place: 'home', homeEquipment: ['band', 'barbell', 'band', 'dumbbell'], bar: true });
+    expect(safe.homeEquipment).toEqual(['band', 'dumbbell']);
+    expect(safe.bar).toBe(false);
+  });
 });

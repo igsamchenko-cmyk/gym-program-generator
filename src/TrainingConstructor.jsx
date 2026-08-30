@@ -1,8 +1,8 @@
 import { useState, useMemo, useEffect, useRef, Component } from "react";
 import { EX } from './data/exercises.js';
 import {
-  REGION, REGION_GROUP, MUSCLE, UNI_SIDE, uniLabel, EQUIP_SETS,
-  PLACE_LABEL, WEEKDAYS, LEVEL_LABEL, GOAL_LABEL, PROGRAM_STYLE_LABEL, programStyleNote,
+  REGION, REGION_GROUP, MUSCLE, UNI_SIDE, uniLabel,
+  PLACE_LABEL, HOME_EQUIPMENT_LABEL, WEEKDAYS, LEVEL_LABEL, GOAL_LABEL, PROGRAM_STYLE_LABEL, programStyleNote,
 } from './data/labels.js';
 import {
   SEX, BALANCE, FOCUS, CUSTOM_FOCUS, AVOID, GROUP_CAP, dayLabel, focusForPriority, loadFor, isLoadable, PROGRESSION, ageFlags, isExerciseAllowed,
@@ -110,6 +110,27 @@ const CSS = `
 .tk-exclude-copy b{font-size:12px;font-weight:600;}
 .tk-exclude-copy small{font-size:11px;color:var(--steel);line-height:1.35;}
 .tk-exclude-warning{font-size:11px;color:var(--hot);margin:10px 0 0;}
+.tk-home{margin-top:12px;border:1px solid var(--line);border-radius:3px;background:var(--card);padding:14px;}
+.tk-home-title{display:block;font-size:13px;margin-bottom:3px;}
+.tk-home-intro{font-size:12px;color:var(--steel);margin:0 0 11px;}
+.tk-home-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;}
+.tk-home-item{font:inherit;display:flex;align-items:flex-start;gap:9px;padding:11px;text-align:left;border:1px solid var(--line);border-radius:3px;background:var(--card);color:var(--ink);cursor:pointer;}
+.tk-home-item:hover{border-color:var(--link);}
+.tk-home-item[aria-pressed="true"]{border-color:var(--deep);background:var(--surf);}
+.tk-home-check{display:grid;place-items:center;width:18px;height:18px;flex:0 0 18px;margin-top:1px;border:1px solid var(--line);border-radius:2px;font-size:12px;color:#fff;}
+.tk-home-item[aria-pressed="true"] .tk-home-check{border-color:var(--deep);background:var(--deep);}
+.tk-home-copy{display:flex;flex-direction:column;gap:2px;}
+.tk-home-copy b{font-size:12px;}
+.tk-home-copy small{font-size:11px;color:var(--steel);line-height:1.35;}
+.tk-home-bodyweight{font-size:12px;margin:10px 0 0;color:var(--steel);}
+.tk-home-bodyweight b{color:var(--ink);}
+.tk-home-kit{margin-top:13px;padding-top:13px;border-top:1px solid var(--line);}
+.tk-home-kit h4{font-size:13px;margin:0 0 8px;}
+.tk-home-kit-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.tk-home-kit h5{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--steel);margin:0 0 5px;}
+.tk-home-kit ul{font-size:12px;margin:0;padding-left:18px;}
+.tk-home-kit li{margin-bottom:4px;}
+.tk-home-safe{font-size:11px;color:var(--hot);margin:10px 0 0;}
 .tk-opt:focus-visible,.tk-wk:focus-visible,.tk-day:focus-visible,.tk-mini:focus-visible{outline:2px solid var(--link);outline-offset:2px;}
 .tk-num{font:inherit;font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;width:88px;padding:9px 11px;border:1px solid var(--line);border-radius:2px;background:var(--card);color:var(--ink);}
 .tk-cta{font:inherit;font-family:'Arial Black','Segoe UI',system-ui,sans-serif;font-weight:500;font-size:15px;width:100%;padding:15px;background:var(--deep);color:#fff;border:none;border-radius:3px;cursor:pointer;}
@@ -197,7 +218,7 @@ const CSS = `
 .tk-rule b{display:block;font-size:11px;font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--steel);margin-bottom:3px;}
 @media (max-width:760px){.tk{background-position:left top;background-size:auto 100vh;background-attachment:scroll;}.tk::before{width:100vw;opacity:var(--center-mobile-opacity);mask-image:none;-webkit-mask-image:none;background-position:center top;}.tk-bar{background:var(--bar-mobile);backdrop-filter:none;-webkit-backdrop-filter:none}.tk-card,.tk-card-dense{background:var(--card-mobile);backdrop-filter:none;-webkit-backdrop-filter:none}}
 @media (prefers-reduced-transparency:reduce){.tk-bar{background:var(--bar);backdrop-filter:none;-webkit-backdrop-filter:none}.tk-card,.tk-card-dense{background:var(--card);backdrop-filter:none;-webkit-backdrop-filter:none}}
-@media (max-width:520px){.tk-volrow{grid-template-columns:92px 1fr 52px;}.tk-ramp{height:92px;}.tk-credit{right:8px;bottom:8px;padding:6px 9px;}.tk-credit strong{font-size:12px;}.tk-warm-notes{grid-template-columns:1fr;}.tk-logfield{flex:1;min-width:64px}.tk-logfield input{width:100%;}.tk-toast{bottom:58px;}}
+@media (max-width:520px){.tk-volrow{grid-template-columns:92px 1fr 52px;}.tk-ramp{height:92px;}.tk-credit{right:8px;bottom:8px;padding:6px 9px;}.tk-credit strong{font-size:12px;}.tk-warm-notes,.tk-home-kit-grid{grid-template-columns:1fr;}.tk-home-grid{grid-template-columns:1fr;}.tk-logfield{flex:1;min-width:64px}.tk-logfield input{width:100%;}.tk-toast{bottom:58px;}}
 @media (prefers-reduced-motion:reduce){.tk-wk span{transition:none;}}
 `;
 
@@ -246,6 +267,57 @@ function OptRow({ options, value, onChange, multi }) {
       {options.map(([k, label]) => (
         <button key={k} type="button" className="tk-opt" aria-pressed={active(k)} onClick={() => toggle(k)}>{label}</button>
       ))}
+    </div>
+  );
+}
+
+function HomeEquipmentPanel({ value = [], onChange = () => {} }) {
+  const options = [
+    ['dumbbell', 'Гантелі', 'звичайні або регульовані'],
+    ['band', 'Резинки', 'довгі петлі чи еспандери'],
+    ['pullupbar', 'Турнік', 'надійно закріплений'],
+  ];
+  const toggle = (key) => onChange(value.includes(key) ? value.filter((item) => item !== key) : [...value, key]);
+  return (
+    <div className="tk-home">
+      <strong className="tk-home-title">Що є вдома</strong>
+      <p className="tk-home-intro">Обери все доступне — варіанти можна поєднувати.</p>
+      <div className="tk-home-grid">
+        {options.map(([key, label, note]) => {
+          const selected = value.includes(key);
+          return (
+            <button key={key} type="button" className="tk-home-item" aria-pressed={selected} onClick={() => toggle(key)}>
+              <span className="tk-home-check" aria-hidden="true">{selected ? '✓' : ''}</span>
+              <span className="tk-home-copy"><b>{label}</b><small>{note}</small></span>
+            </button>
+          );
+        })}
+      </div>
+      <p className="tk-home-bodyweight"><b>Вага тіла</b> · доступна завжди, окремо обирати не потрібно.</p>
+      <div className="tk-home-kit">
+        <h4>Що стане у пригоді вдома</h4>
+        <div className="tk-home-kit-grid">
+          <div>
+            <h5>Варто придбати</h5>
+            <ul>
+              <li>регульовані гантелі — найзручніше для поступового збільшення ваги;</li>
+              <li>довгі резинки різного опору та дверний анкер;</li>
+              <li>неслизький килимок і стійку лаву або степ;</li>
+              <li>турнік — лише з кріпленням, розрахованим на твою вагу.</li>
+            </ul>
+          </div>
+          <div>
+            <h5>Можна знайти вдома</h5>
+            <ul>
+              <li>рюкзак із книжками або пляшками як регульоване обтяження;</li>
+              <li>рушники на гладкій підлозі замість слайдерів;</li>
+              <li>низьку стійку сходинку для зашагувань;</li>
+              <li>важкий стійкий стілець — тільки як опору для рівноваги.</li>
+            </ul>
+          </div>
+        </div>
+        <p className="tk-home-safe">Не використовуй стільці на колесах, скляні меблі, хиткі опори або резинки без надійного кріплення. Перед кожним підходом перевіряй стійкість.</p>
+      </div>
     </div>
   );
 }
@@ -471,11 +543,9 @@ function Wizard({ p, set, onBuild }) {
 
       <div className="tk-field">
         <span className="tk-lbl">Де тренуєшся</span>
-        <OptRow options={[['gym', 'Зал'], ['db', 'Гантелі вдома'], ['band', 'Резинки'], ['bw', 'Тільки вага тіла']]} value={p.place} onChange={(v) => set({ place: v })} />
-        <label className="tk-check" style={{ marginTop: 12, marginBottom: 0 }}>
-          <input type="checkbox" checked={p.bar} onChange={(e) => set({ bar: e.target.checked })} />
-          <span>Є турнік — додати підтягування і підйоми ніг у висі</span>
-        </label>
+        <OptRow options={[['gym', 'Зал'], ['home', 'Вдома']]} value={p.place}
+          onChange={(place) => set({ place, bar: place === 'gym' || p.homeEquipment.includes('pullupbar') })} />
+        {p.place === 'home' && <HomeEquipmentPanel value={p.homeEquipment} onChange={(homeEquipment) => set({ homeEquipment, bar: homeEquipment.includes('pullupbar') })} />}
       </div>
 
       <div className="tk-field">
@@ -497,7 +567,7 @@ function Wizard({ p, set, onBuild }) {
 
       <div className="tk-field">
         <ExclusionMenu value={p.avoid} onChange={(avoid) => set({ avoid })}
-          floorWarning={p.place === 'bw' && p.avoid.includes('floor')} />
+          floorWarning={p.place === 'home' && p.homeEquipment.length === 0 && p.avoid.includes('floor')} />
       </div>
 
       <div className="tk-field">
@@ -948,6 +1018,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
             <span className="tk-chip">{LEVEL_LABEL[profile.level]}</span>
             <span className="tk-chip">{profile.days} дн/тиж</span>
             <span className="tk-chip">{PLACE_LABEL[profile.place]}</span>
+            {profile.place === 'home' && profile.homeEquipment.map((item) => <span className="tk-chip" key={'equipment-' + item}>{HOME_EQUIPMENT_LABEL[item]}</span>)}
             <span className="tk-chip">{GOAL_LABEL[profile.goal]}</span>
             <span className="tk-chip">{(FOCUS[profile.focus] || CUSTOM_FOCUS).label}</span>
             <span className="tk-chip">{weeks.length} тижнів</span>
@@ -1084,3 +1155,5 @@ export default function TrainingConstructor() {
     </ErrorBoundary>
   );
 }
+
+export { HomeEquipmentPanel };

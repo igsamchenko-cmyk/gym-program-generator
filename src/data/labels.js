@@ -32,13 +32,15 @@ const uniLabel = (ex) => (ex.uni ? 'на кожну ' + (UNI_SIDE[ex.p] || 'ст
 
 const EQUIP_SETS = {
   gym: ['barbell', 'dumbbell', 'machine', 'cable', 'band', 'bodyweight', 'pullupbar', 'dipstation'],
+  home: ['bodyweight'],
   db: ['dumbbell', 'band', 'bodyweight'],
   band: ['band', 'bodyweight'],
   bw: ['bodyweight'],
 };
 
 
-const PLACE_LABEL = { gym: 'Зал', db: 'Гантелі вдома', band: 'Резинки', bw: 'Вага тіла' };
+const PLACE_LABEL = { gym: 'Зал', home: 'Вдома', db: 'Гантелі вдома', band: 'Резинки', bw: 'Вага тіла' };
+const HOME_EQUIPMENT_LABEL = { dumbbell: 'Гантелі', band: 'Резинки', pullupbar: 'Турнік' };
 
 
 const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
@@ -88,7 +90,7 @@ const programStyleNote = (style, days) => style === 'auto'
   : (PROGRAM_STYLE_NOTE[style] && PROGRAM_STYLE_NOTE[style][days]) || SPLIT_NOTE[days];
 
 export {
-  REGION, REGION_GROUP, MUSCLE, UNI_SIDE, uniLabel, EQUIP_SETS, PLACE_LABEL,
+  REGION, REGION_GROUP, MUSCLE, UNI_SIDE, uniLabel, EQUIP_SETS, PLACE_LABEL, HOME_EQUIPMENT_LABEL,
   WEEKDAYS, SLOW_RECOVERY, LIMIT_LABEL, LEVEL_LABEL, GOAL_LABEL, DAY_NAME, SPLIT_NOTE,
   PROGRAM_STYLE_LABEL, PROGRAM_STYLE_NOTE, programStyleNote,
 };

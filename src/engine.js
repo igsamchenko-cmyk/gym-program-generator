@@ -308,10 +308,24 @@ function meetsExperienceGate(ex, p) {
   return true;
 }
 
+const HOME_EQUIPMENT = new Set(['dumbbell', 'band', 'pullupbar']);
+
+function allowedEquipmentFor(p = {}) {
+  if (p.place === 'gym') return new Set(EQUIP_SETS.gym);
+  if (['db', 'band', 'bw'].includes(p.place)) {
+    const legacy = new Set(EQUIP_SETS[p.place]);
+    if (p.bar) legacy.add('pullupbar');
+    return legacy;
+  }
+  const allowed = new Set(EQUIP_SETS.home);
+  const selected = Array.isArray(p.homeEquipment) ? p.homeEquipment : [];
+  selected.filter((item) => HOME_EQUIPMENT.has(item)).forEach((item) => allowed.add(item));
+  return allowed;
+}
+
 function isExerciseAllowed(ex, p) {
   if (!ex || !p) return false;
-  const allowed = new Set(EQUIP_SETS[p.place] || EQUIP_SETS.gym);
-  if (p.bar) allowed.add('pullupbar');
+  const allowed = allowedEquipmentFor(p);
   const limits = Array.isArray(p.limits) ? p.limits : [];
   const basic = (candidate) => allowed.has(candidate.eq)
     && candidate.d <= maxDifficultyFor(p)
@@ -426,8 +440,7 @@ function markHeavy(day) {
 function buildPlan(pRaw) {
   const p = sanitizeProfile(pRaw);
   if (!isProfileBuildable(p)) throw new Error('У власній розкладці кожен тренувальний день має містити хоча б одну групу м’язів');
-  const allowed = new Set(EQUIP_SETS[p.place] || EQUIP_SETS.gym);
-  if (p.bar) allowed.add('pullupbar');
+  const allowed = allowedEquipmentFor(p);
   const fl = ageFlags(p.age);
   const usedWeek = new Set();
   let counter = 0;
@@ -842,7 +855,7 @@ function warmup(plan, day) {
 const DEFAULT_PROFILE = {
   age: 39, sex: 'm', level: 'adv', days: 3, mode: 'auto', programStyle: 'auto',
   customDays: [{ groups: ['back', 'biceps'] }, { groups: ['chest', 'delts', 'triceps'] }, { groups: ['quads', 'hams', 'glutes', 'calves'] }],
-  place: 'gym', bar: true, goal: 'hyper', focus: 'upper', priority: ['back', 'chest'], avoid: [], limits: [], balance: 'steady',
+  place: 'gym', homeEquipment: [], bar: true, goal: 'hyper', focus: 'upper', priority: ['back', 'chest'], avoid: [], limits: [], balance: 'steady',
   weekdays: [0, 2, 4], timeCap: null, fatigue: false, seed: 0,
 };
 const DEFAULT_WEEKDAYS = {
@@ -853,7 +866,7 @@ const PROFILE_VALUES = {
   level: new Set(['beg', 'int', 'adv']),
   mode: new Set(['auto', 'custom']),
   programStyle: new Set(['auto', 'fullbody', 'split']),
-  place: new Set(['gym', 'db', 'band', 'bw']),
+  place: new Set(['gym', 'home']),
   goal: new Set(['hyper', 'strength', 'fatloss', 'health']),
   focus: new Set([...Object.keys(FOCUS), 'custom']),
   avoid: new Set(Object.keys(AVOID)),
@@ -862,6 +875,7 @@ const PROFILE_VALUES = {
 };
 const cloneDefaultProfile = () => ({
   ...DEFAULT_PROFILE,
+  homeEquipment: DEFAULT_PROFILE.homeEquipment.slice(),
   priority: DEFAULT_PROFILE.priority.slice(),
   avoid: DEFAULT_PROFILE.avoid.slice(),
   limits: [],
@@ -884,6 +898,14 @@ function sanitizeProfile(saved) {
   const muscleKeys = new Set(Object.keys(MUSCLE));
   const savedPriority = saved.priority === undefined ? fallback.priority.slice() : uniqueAllowed(saved.priority, muscleKeys, 2);
   const inferredFocus = focusForPriority(savedPriority);
+  const legacyHome = { db: ['dumbbell', 'band'], band: ['band'], bw: [] };
+  const legacyPlace = Object.prototype.hasOwnProperty.call(legacyHome, saved.place);
+  const place = saved.place === 'home' || legacyPlace ? 'home' : PROFILE_VALUES.place.has(saved.place) ? saved.place : fallback.place;
+  const selectedHomeEquipment = legacyPlace
+    ? legacyHome[saved.place].slice()
+    : Array.isArray(saved.homeEquipment) ? uniqueAllowed(saved.homeEquipment, HOME_EQUIPMENT) : [];
+  if (place === 'home' && saved.bar === true && (legacyPlace || !Array.isArray(saved.homeEquipment))
+    && !selectedHomeEquipment.includes('pullupbar')) selectedHomeEquipment.push('pullupbar');
   const safe = {
     age: safeInteger(saved.age, fallback.age, 14, 70),
     sex: PROFILE_VALUES.sex.has(saved.sex) ? saved.sex : fallback.sex,
@@ -891,8 +913,9 @@ function sanitizeProfile(saved) {
     days,
     mode: PROFILE_VALUES.mode.has(saved.mode) ? saved.mode : fallback.mode,
     programStyle: PROFILE_VALUES.programStyle.has(saved.programStyle) ? saved.programStyle : fallback.programStyle,
-    place: PROFILE_VALUES.place.has(saved.place) ? saved.place : fallback.place,
-    bar: typeof saved.bar === 'boolean' ? saved.bar : fallback.bar,
+    place,
+    homeEquipment: selectedHomeEquipment,
+    bar: place === 'gym' || selectedHomeEquipment.includes('pullupbar'),
     goal: PROFILE_VALUES.goal.has(saved.goal) ? saved.goal : fallback.goal,
     focus: PROFILE_VALUES.focus.has(saved.focus) ? saved.focus : inferredFocus,
     balance: PROFILE_VALUES.balance.has(saved.balance) ? saved.balance : fallback.balance,
@@ -925,7 +948,7 @@ export {
   GROUP_SLOTS, GROUP_WEIGHT, GROUP_CAP, customSlots, dayLabel,
   PRIORITY_PATTERN, FALLBACK, MACRO, LOADS, HEAVY_LOAD, round2, loadFor, isLoadable,
   REPS, VOLUME_TARGET, MUSCLE_CAP, PROGRESSION, ageFlags, stableBias,
-  focusForPriority, isAvoidedExercise, exercisePreferenceScore, preferExercises, maxDifficultyFor, meetsExperienceGate, isExerciseAllowed, isAutoSelectable,
+  focusForPriority, isAvoidedExercise, exercisePreferenceScore, preferExercises, maxDifficultyFor, meetsExperienceGate, HOME_EQUIPMENT, allowedEquipmentFor, isExerciseAllowed, isAutoSelectable,
   slotCount, baseSets, LAST_IN_DAY, orderScore, HEAVY_RANK, markHeavy, buildPlan,
   isHeavy, setsFor, rirFor, repsFor, tempoFor, restFor, targetFor, weeklyVolume,
   restSec, sessionMinutes, scheduleWarnings, frequency, techMarks, WARMUP_GUIDES, warmup,
