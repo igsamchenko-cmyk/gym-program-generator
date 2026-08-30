@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, Component } from "react";
+import { useState, useMemo, useEffect, useRef, Component } from "react";
 import { EX } from './data/exercises.js';
 import {
   REGION, REGION_GROUP, MUSCLE, UNI_SIDE, uniLabel, EQUIP_SETS,
@@ -10,6 +10,25 @@ import {
   weeklyVolume, sessionMinutes, scheduleWarnings, frequency, techMarks, warmup,
   DEFAULT_PROFILE, sanitizeProfile,
 } from './engine.js';
+import {
+  APP_STATE_VERSION, SHARE_PREFIX, cleanAnchors, cleanJournal, decodeSharePayload,
+  encodeSharePayload, hydrateSwaps, journalKey, makeBackupPayload, makeSharePayload,
+  serializeSwaps,
+} from './appState.js';
+
+const STATE_KEY = 'tk-state';
+
+function downloadJson(filename, value) {
+  const blob = new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
 
 /* Автономне сховище: той самий контракт {get,set,delete}, що й window.storage
    у середовищі Claude-артефактів, але на звичайному localStorage браузера.
@@ -134,6 +153,16 @@ const CSS = `
 .tk-load{display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap;}
 .tk-load b{font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;font-size:14px;background:var(--deep);color:#fff;padding:2px 8px;border-radius:2px;}
 .tk-wnum{font:inherit;font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;width:104px;padding:5px 8px;border:1px solid var(--line);border-radius:2px;background:var(--card);color:var(--ink);font-size:12px;}
+.tk-actions{display:flex;gap:4px 10px;flex-wrap:wrap;align-items:center;}
+.tk-file{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;}
+.tk-journal-progress{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--surf);border:1px solid var(--line);border-radius:3px;padding:9px 11px;margin:0 0 6px;font-size:12px;color:var(--steel);}
+.tk-journal-progress b{color:var(--ink);}
+.tk-log{display:flex;align-items:end;gap:8px;flex-wrap:wrap;background:var(--surf);border:1px solid var(--line);border-radius:3px;padding:10px 11px;margin-top:10px;}
+.tk-logdone{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;margin-right:4px;padding-bottom:5px;}
+.tk-logfield{display:flex;flex-direction:column;gap:3px;font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--steel);}
+.tk-logfield input{font:inherit;font-size:12px;width:78px;padding:5px 7px;border:1px solid var(--line);border-radius:2px;background:var(--card);color:var(--ink);}
+.tk-toast{position:fixed;z-index:50;left:50%;bottom:20px;transform:translateX(-50%);max-width:min(520px,calc(100vw - 24px));padding:10px 14px;background:var(--ink);color:var(--card);border:1px solid var(--line);border-radius:3px;box-shadow:0 8px 28px rgba(0,0,0,.24);font-size:13px;text-align:center;}
+.tk-toast.bad{background:var(--hot);color:#fff;border-color:var(--hot);}
 .tk-why{background:var(--card);border:1px dashed var(--line);border-left:2px solid var(--dl);padding:10px 12px;margin-top:9px;font-size:12.5px;}
 .tk-why ul{margin:4px 0 0;padding-left:16px;}
 .tk-why li{margin-bottom:2px;color:var(--steel);}
@@ -146,7 +175,7 @@ const CSS = `
 .tk-rule b{display:block;font-size:11px;font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--steel);margin-bottom:3px;}
 @media (max-width:760px){.tk{background-position:left top;background-size:auto 100vh;background-attachment:scroll;}.tk::before{width:100vw;opacity:var(--center-mobile-opacity);mask-image:none;-webkit-mask-image:none;background-position:center top;}.tk-bar{background:var(--bar-mobile);backdrop-filter:none;-webkit-backdrop-filter:none}.tk-card,.tk-card-dense{background:var(--card-mobile);backdrop-filter:none;-webkit-backdrop-filter:none}}
 @media (prefers-reduced-transparency:reduce){.tk-bar{background:var(--bar);backdrop-filter:none;-webkit-backdrop-filter:none}.tk-card,.tk-card-dense{background:var(--card);backdrop-filter:none;-webkit-backdrop-filter:none}}
-@media (max-width:520px){.tk-volrow{grid-template-columns:92px 1fr 52px;}.tk-ramp{height:92px;}.tk-credit{right:8px;bottom:8px;padding:6px 9px;}.tk-credit strong{font-size:12px;}.tk-warm-notes{grid-template-columns:1fr;}}
+@media (max-width:520px){.tk-volrow{grid-template-columns:92px 1fr 52px;}.tk-ramp{height:92px;}.tk-credit{right:8px;bottom:8px;padding:6px 9px;}.tk-credit strong{font-size:12px;}.tk-warm-notes{grid-template-columns:1fr;}.tk-logfield{flex:1;min-width:64px}.tk-logfield input{width:100%;}.tk-toast{bottom:58px;}}
 @media (prefers-reduced-motion:reduce){.tk-wk span{transition:none;}}
 `;
 
@@ -167,6 +196,11 @@ function Header({ theme, onToggle }) {
       </div>
     </>
   );
+}
+
+function Toast({ toast }) {
+  if (!toast) return null;
+  return <div className={'tk-toast' + (toast.type === 'bad' ? ' bad' : '')} role="status" aria-live="polite">{toast.message}</div>;
 }
 
 function ageNote(p) {
@@ -421,7 +455,7 @@ function Wizard({ p, set, onBuild }) {
   );
 }
 
-function ExRow({ item, idx, week, plan, heavy, tech, onSwap, anchors, onAnchor }) {
+function ExRow({ item, idx, week, plan, heavy, tech, onSwap, anchors, onAnchor, log, onLog }) {
   const [open, setOpen] = useState(false);
   const [swap, setSwap] = useState(false);
   const [why, setWhy] = useState(false);
@@ -455,6 +489,23 @@ function ExRow({ item, idx, week, plan, heavy, tech, onSwap, anchors, onAnchor }
         <div className="tk-tags">
           {REGION[item.ex.rg]}{item.ex.s && item.ex.s.length ? ' + ' + item.ex.s.map((x) => MUSCLE[x]).join(', ') : ''} · {item.ex.t === 'comp' ? 'базова' : 'ізоляція'}
           {tech && <span className="tk-badge tk-b-tech">останній підхід: дроп-сет або 3–5 часткових у розтягнутій позиції</span>}
+        </div>
+        <div className="tk-log">
+          <label className="tk-logdone">
+            <input type="checkbox" checked={!!log.done} onChange={(e) => onLog('done', e.target.checked)} />
+            Виконано
+          </label>
+          {isLoadable(item.ex) && (
+            <label className="tk-logfield">Фактична вага, кг
+              <input type="number" min="0" step="0.5" inputMode="decimal" value={log.weight ?? ''} onChange={(e) => onLog('weight', e.target.value)} />
+            </label>
+          )}
+          <label className="tk-logfield">{item.ex.u === 'time' ? 'Фактичні секунди' : 'Повтори останнього підходу'}
+            <input type="number" min="0" step="1" inputMode="numeric" value={log.reps ?? ''} onChange={(e) => onLog('reps', e.target.value)} />
+          </label>
+          <label className="tk-logfield">Фактичний RIR
+            <input type="number" min="0" max="10" step="1" inputMode="numeric" value={log.rir ?? ''} onChange={(e) => onLog('rir', e.target.value)} />
+          </label>
         </div>
         <button className="tk-mini" onClick={() => setOpen(!open)}>{open ? 'Згорнути техніку' : 'Техніка'}</button>
         {alts.length > 0 && <button className="tk-mini" onClick={() => setSwap(!swap)}>Замінити</button>}
@@ -550,24 +601,45 @@ class ErrorBoundary extends Component {
 function TrainingConstructorInner({ theme, onThemeToggle }) {
   const [profile, setProfile] = useState(DEFAULT_PROFILE);
   const [anchors, setAnchors] = useState({});
+  const [journal, setJournal] = useState({});
   const [loaded, setLoaded] = useState(false);
   const [plan, setPlan] = useState(null);
   const [wk, setWk] = useState(0);
   const [day, setDay] = useState(0);
   const [swaps, setSwaps] = useState({});
   const [buildErr, setBuildErr] = useState(null);
+  const [toast, setToast] = useState(null);
+  const toastTimer = useRef(null);
+  const importRef = useRef(null);
   const set = (patch) => setProfile((s) => ({ ...s, ...patch }));
+  const showToast = (message, type = 'ok') => {
+    setToast({ message, type });
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 3600);
+  };
+  const applyPortableState = (raw, includeJournal = true) => {
+    if (!raw || typeof raw !== 'object' || !raw.profile) throw new Error('Файл не містить профілю програми');
+    const safe = sanitizeProfile(raw.profile);
+    setProfile(safe);
+    setAnchors(cleanAnchors(raw.anchors));
+    setSwaps(hydrateSwaps(raw.swaps, EX));
+    setJournal(includeJournal ? cleanJournal(raw.journal) : {});
+    setPlan(raw.built === false ? null : buildPlan(safe));
+    setWk(0);
+    setDay(0);
+    setBuildErr(null);
+  };
   const build = (p) => {
     try {
       const prof = p || profile;
       setPlan(buildPlan(prof));
-      setWk(0); setDay(0); setSwaps({}); setBuildErr(null);
+      setWk(0); setDay(0); setSwaps({}); setJournal({}); setBuildErr(null);
     } catch (e) { setBuildErr(e.message || String(e)); }
   };
   const variant = () => {
     try {
       const prof = { ...profile, seed: (profile.seed || 0) + 1 };
-      setProfile(prof); setPlan(buildPlan(prof)); setSwaps({}); setBuildErr(null);
+      setProfile(prof); setPlan(buildPlan(prof)); setSwaps({}); setJournal({}); setBuildErr(null);
     } catch (e) { setBuildErr(e.message || String(e)); }
   };
   const setFatigue = (v) => {
@@ -581,28 +653,108 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
   useEffect(() => {
     (async () => {
       try {
-        const r = await storage.get('tk-state');
+        if (location.hash.startsWith(SHARE_PREFIX)) {
+          const shared = decodeSharePayload(location.hash.slice(SHARE_PREFIX.length));
+          applyPortableState(shared, false);
+          history.replaceState(null, '', location.pathname + location.search);
+          showToast('Програму з посилання відкрито');
+          setLoaded(true);
+          return;
+        }
+        const r = await storage.get(STATE_KEY);
         if (r && r.value) {
           const st = JSON.parse(r.value);
-          if (st.profile) {
-            const safe = sanitizeProfile(st.profile);
-            setProfile(safe);
-            if (st.built) setPlan(buildPlan(safe));
-          }
-          if (st.anchors) setAnchors(st.anchors);
-          if (st.swaps) setSwaps(st.swaps);
+          applyPortableState(st, true);
         }
-      } catch (e) { /* перший запуск або сховище недоступне */ }
+      } catch (e) {
+        if (location.hash.startsWith(SHARE_PREFIX)) {
+          history.replaceState(null, '', location.pathname + location.search);
+          showToast('Не вдалося відкрити програму з посилання', 'bad');
+        }
+      }
       setLoaded(true);
     })();
+    return () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    };
   }, []);
   useEffect(() => {
     if (!loaded) return;
     (async () => {
-      try { await storage.set('tk-state', JSON.stringify({ profile, anchors, swaps, built: !!plan })); } catch (e) {}
+      try {
+        await storage.set(STATE_KEY, JSON.stringify({
+          version: APP_STATE_VERSION,
+          profile,
+          anchors: cleanAnchors(anchors),
+          swaps: serializeSwaps(swaps),
+          journal: cleanJournal(journal),
+          built: !!plan,
+        }));
+      } catch (e) {}
     })();
-  }, [profile, anchors, swaps, plan, loaded]);
-  const reset = async () => { try { await storage.delete('tk-state'); } catch (e) {} setAnchors({}); setSwaps({}); setPlan(null); };
+  }, [profile, anchors, swaps, journal, plan, loaded]);
+  const reset = async () => {
+    try { await storage.delete(STATE_KEY); } catch (e) {}
+    setAnchors({});
+    setSwaps({});
+    setJournal({});
+    setPlan(null);
+  };
+  const updateAnchor = (id, raw) => {
+    setAnchors((current) => {
+      const next = { ...current };
+      const value = Number(raw);
+      if (raw === '' || !Number.isFinite(value) || value <= 0) delete next[id];
+      else next[id] = value;
+      return next;
+    });
+  };
+  const updateLog = (key, field, raw) => {
+    setJournal((current) => {
+      const entry = { ...(current[key] || {}) };
+      if (field === 'done') entry.done = !!raw;
+      else if (raw === '') delete entry[field];
+      else {
+        const value = Number(raw);
+        if (Number.isFinite(value) && value >= 0) entry[field] = value;
+      }
+      const hasData = entry.done || entry.weight != null || entry.reps != null || entry.rir != null;
+      const next = { ...current };
+      if (!hasData) delete next[key];
+      else next[key] = { ...entry, updatedAt: new Date().toISOString() };
+      return next;
+    });
+  };
+  const shareProgram = async () => {
+    try {
+      const payload = makeSharePayload({ profile, anchors, swaps });
+      const url = location.href.split('#')[0] + SHARE_PREFIX + encodeSharePayload(payload);
+      if (navigator.share) await navigator.share({ title: 'Моя програма тренувань', text: 'Відкрий програму тренувань', url });
+      else await navigator.clipboard.writeText(url);
+      showToast(navigator.share ? 'Програму надіслано' : 'Посилання скопійовано');
+    } catch (e) {
+      if (e?.name !== 'AbortError') showToast('Не вдалося створити посилання', 'bad');
+    }
+  };
+  const exportBackup = () => {
+    try {
+      const stamp = new Date().toISOString().slice(0, 10);
+      downloadJson(`gym-program-backup-${stamp}.json`, makeBackupPayload({ profile, anchors, swaps, journal, built: !!plan }));
+      showToast('Резервну копію збережено');
+    } catch (e) { showToast('Не вдалося створити резервну копію', 'bad'); }
+  };
+  const importBackup = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      applyPortableState(JSON.parse(await file.text()), true);
+      showToast('Програму та журнал відновлено');
+    } catch (e) {
+      showToast('Не вдалося прочитати резервну копію: ' + (e.message || String(e)), 'bad');
+    } finally {
+      event.target.value = '';
+    }
+  };
 
   const view = useMemo(() => {
     if (!plan) return null;
@@ -664,7 +816,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
       a.href = url; a.download = 'programa-' + weeks.length + 'tyzhniv.xlsx';
       document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
-    } catch (e) { alert('Експорт не вдався: ' + e.message); }
+    } catch (e) { showToast('Експорт не вдався: ' + e.message, 'bad'); }
     finally { setExporting(false); }
   };
 
@@ -672,6 +824,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
     return (
       <div className="tk" data-theme={theme}><style>{CSS}</style>
         <Header theme={theme} onToggle={onThemeToggle} />
+        <Toast toast={toast} />
         <div className="tk-main">
           {buildErr && (
             <div className="tk-alert">
@@ -682,6 +835,12 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
               </div>
             </div>
           )}
+          <div className="tk-card">
+            <div className="tk-eyebrow">Уже маєш резервну копію?</div>
+            <p className="tk-p">Імпортуй JSON-файл — профіль, програма та журнал відновляться на цьому пристрої.</p>
+            <button className="tk-mini" style={{ paddingLeft: 0 }} onClick={() => importRef.current?.click()}>Імпортувати резервну копію</button>
+            <input ref={importRef} className="tk-file" type="file" accept="application/json,.json" onChange={importBackup} />
+          </div>
           <Wizard p={profile} set={set} onBuild={build} />
         </div>
       </div>
@@ -708,14 +867,16 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
         });
       });
     });
-    try { await navigator.clipboard.writeText(out.join('\n')); alert('План скопійовано'); }
-    catch { alert('Скопіювати не вдалося — виділи текст вручну'); }
+    try { await navigator.clipboard.writeText(out.join('\n')); showToast('План скопійовано'); }
+    catch { showToast('Скопіювати не вдалося — спробуй резервну копію', 'bad'); }
   };
+  const dayDone = view.days[day].items.reduce((total, item) => total + (journal[journalKey(wk, day, item.ex.id)]?.done ? 1 : 0), 0);
 
   return (
     <div className="tk" data-theme={theme}>
       <style>{CSS}</style>
       <Header theme={theme} onToggle={onThemeToggle} />
+      <Toast toast={toast} />
       <div className="tk-main">
         <div className="tk-card">
           <div className="tk-chips">
@@ -731,11 +892,17 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
             {profile.priority.map((m) => <span className="tk-chip" key={m}>↑ {MUSCLE[m]}</span>)}
             {profile.avoid.map((key) => <span className="tk-chip" key={'avoid-' + key}>× {AVOID[key].label}</span>)}
           </div>
-          <button className="tk-mini" style={{ paddingLeft: 0 }} onClick={() => setPlan(null)}>Змінити параметри</button>
-          <button className="tk-mini" onClick={copy}>Скопіювати</button>
-          <button className="tk-mini" onClick={exportXlsx} disabled={exporting}>{exporting ? 'Готую файл…' : 'Експорт у Excel'}</button>
-          <button className="tk-mini" onClick={variant}>Інший варіант</button>
-          <button className="tk-mini" onClick={reset}>Скинути все</button>
+          <div className="tk-actions">
+            <button className="tk-mini" style={{ paddingLeft: 0 }} onClick={() => setPlan(null)}>Змінити параметри</button>
+            <button className="tk-mini" onClick={copy}>Скопіювати</button>
+            <button className="tk-mini" onClick={shareProgram}>Поділитися</button>
+            <button className="tk-mini" onClick={exportBackup}>Резервна копія</button>
+            <button className="tk-mini" onClick={() => importRef.current?.click()}>Імпортувати</button>
+            <button className="tk-mini" onClick={exportXlsx} disabled={exporting}>{exporting ? 'Готую файл…' : 'Експорт у Excel'}</button>
+            <button className="tk-mini" onClick={variant}>Інший варіант</button>
+            <button className="tk-mini" onClick={reset}>Скинути все</button>
+          </div>
+          <input ref={importRef} className="tk-file" type="file" accept="application/json,.json" onChange={importBackup} />
           <label className="tk-check" style={{ marginTop: 12, marginBottom: 0 }}>
             <input type="checkbox" checked={profile.fatigue} onChange={(e) => setFatigue(e.target.checked)} />
             <span>Сон або енергія просіли другий тиждень поспіль — увімкнути запобіжник. Інтенсивні техніки знімаються, з ізоляції йде по одному підходу, база лишається недоторканою.</span>
@@ -790,12 +957,20 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
             <strong style={{ fontSize: 13 }}>Розминка</strong>
             <ul>{warm.map((item) => <WarmupItem key={item.id} item={item} />)}</ul>
           </div>
-          {view.days[day].items.map((it, i) => (
-            <ExRow key={i} item={it} idx={i} week={week} plan={view}
-              heavy={isHeavy(day, i, week, view)} tech={marks.has(i)}
-              anchors={anchors} onAnchor={(id, v) => setAnchors((a) => ({ ...a, [id]: v ? Number(v) : 0 }))}
-              onSwap={(ex) => setSwaps((s) => ({ ...s, [day + ':' + plan.days[day].items[i].ex.id]: ex }))} />
-          ))}
+          <div className="tk-journal-progress">
+            <span><b>{dayDone}/{view.days[day].items.length}</b> вправ виконано</span>
+            <span>Журнал зберігається на пристрої</span>
+          </div>
+          {view.days[day].items.map((it, i) => {
+            const key = journalKey(wk, day, it.ex.id);
+            return (
+              <ExRow key={plan.days[day].items[i].ex.id} item={it} idx={i} week={week} plan={view}
+                heavy={isHeavy(day, i, week, view)} tech={marks.has(i)}
+                anchors={anchors} onAnchor={updateAnchor}
+                log={journal[key] || {}} onLog={(field, value) => updateLog(key, field, value)}
+                onSwap={(ex) => setSwaps((s) => ({ ...s, [day + ':' + plan.days[day].items[i].ex.id]: ex }))} />
+            );
+          })}
         </div>
 
         {week.test && (
