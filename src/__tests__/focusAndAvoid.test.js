@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import TrainingConstructor, { HomeEquipmentPanel } from '../TrainingConstructor.jsx';
+import TrainingConstructor, { HelpLabel, HomeEquipmentPanel, ReadingGuide } from '../TrainingConstructor.jsx';
 import {
   AVOID, FOCUS, SEX, DEFAULT_PROFILE,
   buildPlan, frequency, isAvoidedExercise, isExerciseAllowed, sanitizeProfile,
@@ -52,6 +52,24 @@ describe('акцент програми та особисті виключенн
     expect(html).toContain('рюкзак');
     expect(html).toContain('стільці на колесах');
     expect(html.match(/aria-pressed="true"/g)).toHaveLength(2);
+  });
+
+  it('складні поля анкети мають доступні контекстні пояснення', () => {
+    const html = renderToStaticMarkup(createElement(HelpLabel, {
+      label: 'Баланс і контроль руху',
+      children: 'Оціни здатність утримувати положення без хитання.',
+    }));
+    expect(html).toContain('name="tk-context-help"');
+    expect(html).toContain('aria-label="Пояснення: Баланс і контроль руху"');
+    expect(html).toContain('tk-help-icon');
+    expect(html).toContain('без хитання');
+  });
+
+  it('готова програма має короткий словник усіх основних позначень', () => {
+    const html = renderToStaticMarkup(createElement(ReadingGuide));
+    ['Як читати програму', 'Макроцикл', '3 × 8–12', 'RIR 2', 'Темп 3-0-2',
+      'Тижневий обсяг', 'Делоад / DL', 'Важкий блок', 'SFR', 'Відпочинок']
+      .forEach((term) => expect(html).toContain(term));
   });
 
   it('жіночий стартовий профіль видимий, а старі збережені дані мігрують без втрат', () => {

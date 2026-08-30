@@ -84,6 +84,30 @@ const CSS = `
 .tk-field{margin-bottom:20px;}
 .tk-lbl{display:block;font-size:13px;font-weight:600;margin-bottom:8px;}
 .tk-hint{font-size:12px;color:var(--steel);margin-top:6px;}
+.tk-help{margin:0 0 8px;}
+.tk-help summary{display:flex;align-items:center;gap:7px;width:fit-content;list-style:none;cursor:pointer;color:var(--ink);}
+.tk-help summary::-webkit-details-marker{display:none;}
+.tk-help summary:focus-visible{outline:2px solid var(--link);outline-offset:3px;border-radius:2px;}
+.tk-help-label{font-size:13px;font-weight:600;}
+.tk-help-note{font-size:12px;font-weight:400;color:var(--steel);}
+.tk-help-icon{display:grid;place-items:center;width:18px;height:18px;border:1px solid var(--line);border-radius:50%;font-family:Georgia,serif;font-size:12px;font-weight:700;color:var(--link);background:var(--card);}
+.tk-help summary:hover .tk-help-icon,.tk-help[open] .tk-help-icon{border-color:var(--deep);background:var(--deep);color:#fff;}
+.tk-help-body{max-width:680px;margin-top:7px;padding:9px 11px;border-left:2px solid var(--link);background:var(--surf);font-size:12px;font-weight:400;color:var(--steel);line-height:1.5;}
+.tk-reading{border:1px solid var(--line);border-radius:4px;background:var(--card-glass);margin-bottom:14px;box-shadow:var(--card-shadow);overflow:hidden;}
+.tk-reading summary{display:flex;align-items:center;gap:12px;padding:15px 18px;cursor:pointer;list-style:none;}
+.tk-reading summary::-webkit-details-marker{display:none;}
+.tk-reading summary:focus-visible{outline:2px solid var(--link);outline-offset:-3px;}
+.tk-reading-heading{display:flex;flex-direction:column;gap:2px;min-width:0;}
+.tk-reading-heading strong{font-size:14px;}
+.tk-reading-heading small{font-size:11px;font-weight:400;color:var(--steel);}
+.tk-reading-arrow{margin-left:auto;color:var(--steel);transition:transform .15s ease;}
+.tk-reading[open] .tk-reading-arrow{transform:rotate(180deg);}
+.tk-reading-body{padding:14px 18px 17px;border-top:1px solid var(--line);}
+.tk-reading-intro{font-size:12px;color:var(--steel);margin:0 0 11px;}
+.tk-reading-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+.tk-reading-item{padding:10px 11px;background:var(--surf);border-radius:3px;}
+.tk-reading-item b{display:block;font-size:12px;margin-bottom:2px;}
+.tk-reading-item span{display:block;font-size:11px;color:var(--steel);line-height:1.45;}
 .tk-opts{display:flex;flex-wrap:wrap;gap:6px;}
 .tk-opt{font:inherit;font-size:13px;padding:8px 13px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:2px;cursor:pointer;}
 .tk-opt:hover{border-color:var(--link);}
@@ -218,7 +242,7 @@ const CSS = `
 .tk-rule b{display:block;font-size:11px;font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--steel);margin-bottom:3px;}
 @media (max-width:760px){.tk{background-position:left top;background-size:auto 100vh;background-attachment:scroll;}.tk::before{width:100vw;opacity:var(--center-mobile-opacity);mask-image:none;-webkit-mask-image:none;background-position:center top;}.tk-bar{background:var(--bar-mobile);backdrop-filter:none;-webkit-backdrop-filter:none}.tk-card,.tk-card-dense{background:var(--card-mobile);backdrop-filter:none;-webkit-backdrop-filter:none}}
 @media (prefers-reduced-transparency:reduce){.tk-bar{background:var(--bar);backdrop-filter:none;-webkit-backdrop-filter:none}.tk-card,.tk-card-dense{background:var(--card);backdrop-filter:none;-webkit-backdrop-filter:none}}
-@media (max-width:520px){.tk-volrow{grid-template-columns:92px 1fr 52px;}.tk-ramp{height:92px;}.tk-credit{right:8px;bottom:8px;padding:6px 9px;}.tk-credit strong{font-size:12px;}.tk-warm-notes,.tk-home-kit-grid{grid-template-columns:1fr;}.tk-home-grid{grid-template-columns:1fr;}.tk-logfield{flex:1;min-width:64px}.tk-logfield input{width:100%;}.tk-toast{bottom:58px;}}
+@media (max-width:520px){.tk-volrow{grid-template-columns:92px 1fr 52px;}.tk-ramp{height:92px;}.tk-credit{right:8px;bottom:8px;padding:6px 9px;}.tk-credit strong{font-size:12px;}.tk-warm-notes,.tk-home-kit-grid,.tk-reading-grid{grid-template-columns:1fr;}.tk-home-grid{grid-template-columns:1fr;}.tk-reading summary{padding:14px;}.tk-reading-body{padding:12px 14px 15px;}.tk-logfield{flex:1;min-width:64px}.tk-logfield input{width:100%;}.tk-toast{bottom:58px;}}
 @media (prefers-reduced-motion:reduce){.tk-wk span{transition:none;}}
 `;
 
@@ -268,6 +292,53 @@ function OptRow({ options, value, onChange, multi }) {
         <button key={k} type="button" className="tk-opt" aria-pressed={active(k)} onClick={() => toggle(k)}>{label}</button>
       ))}
     </div>
+  );
+}
+
+function HelpLabel({ label, note, children }) {
+  return (
+    <details className="tk-help" name="tk-context-help">
+      <summary aria-label={'Пояснення: ' + label}>
+        <span className="tk-help-label">{label}</span>
+        {note && <span className="tk-help-note">— {note}</span>}
+        <span className="tk-help-icon" aria-hidden="true">i</span>
+      </summary>
+      <div className="tk-help-body">{children}</div>
+    </details>
+  );
+}
+
+function ReadingGuide() {
+  const terms = [
+    ['Макроцикл', 'Уся послідовність тижнів програми: від входження в навантаження до важчих фаз і розвантаження.'],
+    ['3 × 8–12', 'Три робочі підходи по 8–12 повторів. Розминочні та підвідні підходи сюди не входять.'],
+    ['RIR 2', 'Зупини підхід, коли відчуваєш, що зміг би виконати ще приблизно два чисті повтори. RIR 0 — повторів у запасі немає.'],
+    ['Темп 3-0-2', 'Три секунди опускання, без паузи, дві секунди підйому. X означає швидкий контрольований підйом.'],
+    ['База та ізоляція', 'Базова вправа навантажує кілька суглобів і груп; ізоляційна переважно спрямована на одну групу.'],
+    ['Тижневий обсяг', 'Кількість робочих підходів на м’язову групу за тиждень. Висота стовпчика показує відносний обсяг, а не вагу.'],
+    ['Делоад / DL', 'Запланований легший тиждень зі зменшеними вагою й кількістю підходів для відновлення.'],
+    ['Важкий блок', 'Підходи на 3–6 повторів у вибраних базових вправах. Це не тест максимуму й не вимога працювати до відмови.'],
+    ['SFR', 'Співвідношення тренувального стимулу до втоми: перевагу отримує варіант, що добре навантажує м’яз без зайвої системної втоми.'],
+    ['Відпочинок', 'Зазначений час між робочими підходами. Якщо дихання або техніка ще не відновилися, відпочинь трохи довше.'],
+  ];
+  return (
+    <details className="tk-reading">
+      <summary>
+        <span className="tk-reading-heading">
+          <strong>Як читати програму</strong>
+          <small>RIR, темп, підходи, делоад та інші позначення</small>
+        </span>
+        <span className="tk-reading-arrow" aria-hidden="true">⌄</span>
+      </summary>
+      <div className="tk-reading-body">
+        <p className="tk-reading-intro">Відкрий цей словник у будь-який момент, якщо позначення біля вправи або тижня незрозуміле.</p>
+        <div className="tk-reading-grid">
+          {terms.map(([term, explanation]) => (
+            <div className="tk-reading-item" key={term}><b>{term}</b><span>{explanation}</span></div>
+          ))}
+        </div>
+      </div>
+    </details>
   );
 }
 
@@ -466,7 +537,7 @@ function Wizard({ p, set, onBuild }) {
       </div>
 
       <div className="tk-field">
-        <span className="tk-lbl">Баланс і контроль руху</span>
+        <HelpLabel label="Баланс і контроль руху">Оціни не силу, а здатність утримувати положення без хитання, втрати траєкторії чи потреби хапатися за опору. Відповідь допомагає замінити нестійкі вправи на варіанти з опорою.</HelpLabel>
         <OptRow options={Object.entries(BALANCE).map(([k, v]) => [k, v.label])} value={p.balance} onChange={(v) => set({ balance: v })} />
         <div className="tk-hint">{BALANCE[p.balance].note} Це точніший критерій вибору вправи, ніж паспортний вік.</div>
       </div>
@@ -478,7 +549,7 @@ function Wizard({ p, set, onBuild }) {
       </div>
 
       <div className="tk-field">
-        <span className="tk-lbl">Стаж силових тренувань</span>
+        <HelpLabel label="Стаж силових тренувань">Рахуй період регулярних тренувань, а не час від першого відвідування залу. Після тривалої перерви краще тимчасово обрати нижчий рівень — це змінить складність вправ, обсяг і довжину циклу.</HelpLabel>
         <OptRow options={[['beg', 'До 6 місяців'], ['int', '6–24 місяці'], ['adv', 'Понад 2 роки']]} value={p.level} onChange={(v) => set({ level: v })} />
         <div className="tk-hint">{PROGRESSION[p.level]}</div>
       </div>
@@ -490,14 +561,14 @@ function Wizard({ p, set, onBuild }) {
       </div>
 
       <div className="tk-field">
-        <span className="tk-lbl">Як скласти програму</span>
+        <HelpLabel label="Як скласти програму">Готова програма сама розподілить групи по днях. У власній розкладці ти визначаєш групи кожного дня, а застосунок усе одно підбирає вправи, порядок і обсяг.</HelpLabel>
         <OptRow options={[['auto', 'Готова програма'], ['custom', 'Налаштувати дні вручну']]} value={p.mode} onChange={(v) => set({ mode: v })} />
         <div className="tk-hint">{p.mode === 'auto' ? 'Застосунок розподілить вправи й обсяг за вибраним форматом.' : 'Обери групи для кожного дня. Слоти всередині дня розподіляються за розміром групи, а порядок вправ і підспецифікації рахує той самий движок, що й у готових шаблонах.'}</div>
       </div>
 
       {p.mode === 'auto' && (
         <div className="tk-field">
-          <span className="tk-lbl">Формат тренувань</span>
+          <HelpLabel label="Формат тренувань">Фулбоді навантажує основні групи в кожній сесії. Спліт розподіляє їх між окремими днями. Автоматичний режим обирає формат за кількістю тренувань.</HelpLabel>
           <OptRow options={[
             ['auto', PROGRAM_STYLE_LABEL.auto],
             ...(p.days <= 4 ? [['fullbody', PROGRAM_STYLE_LABEL.fullbody]] : []),
@@ -535,7 +606,7 @@ function Wizard({ p, set, onBuild }) {
       </div>
 
       <div className="tk-field">
-        <span className="tk-lbl">Скільки часу на тренування</span>
+        <HelpLabel label="Скільки часу на тренування">Ліміт охоплює розминку, робочі підходи й відпочинок. Якщо часу бракує, програма спершу скорочує допоміжний обсяг, зберігаючи основні рухи.</HelpLabel>
         <OptRow options={[['0', 'Без ліміту'], ['45', '45 хв'], ['60', '60 хв'], ['75', '75 хв'], ['90', '90 хв']]}
           value={String(p.timeCap || 0)} onChange={(v) => set({ timeCap: Number(v) || null })} />
         <div className="tk-hint">Якщо сесія не вкладається, конструктор зрізає підходи в ізоляції, потім прибирає ізоляційні вправи. Базові рухи чіпає останніми.</div>
@@ -549,18 +620,18 @@ function Wizard({ p, set, onBuild }) {
       </div>
 
       <div className="tk-field">
-        <span className="tk-lbl">Головна ціль</span>
+        <HelpLabel label="Головна ціль">Гіпертрофія налаштовує програму на ріст м’язів, сила — на важчі підходи й довший відпочинок, здоров’я — на кероване навантаження, зниження ваги — на щільніші сесії. Втрата ваги все одно залежить насамперед від харчування.</HelpLabel>
         <OptRow options={[['hyper', 'Гіпертрофія'], ['strength', 'Сила'], ['fatloss', 'Зниження ваги'], ['health', 'Здоров’я']]} value={p.goal} onChange={(v) => set({ goal: v })} />
       </div>
 
       <div className="tk-field">
-        <span className="tk-lbl">Акцент програми</span>
+        <HelpLabel label="Акцент програми">Це готовий профіль пріоритетів: він змінює частоту груп і порядок рівноцінних вправ, але не прибирає тренування решти тіла.</HelpLabel>
         <OptRow options={Object.entries(FOCUS).map(([k, v]) => [k, v.label])} value={p.focus} onChange={changeFocus} />
         <div className="tk-hint">{focusInfo.note} Це стартовий профіль, а не обмеження за статтю.</div>
       </div>
 
       <div className="tk-field">
-        <span className="tk-lbl">Пріоритетні групи <span style={{ fontWeight: 400, color: 'var(--steel)' }}>— не більше двох</span></span>
+        <HelpLabel label="Пріоритетні групи" note="не більше двох">Обрані групи отримують додаткове пряме навантаження і ставляться раніше в сесії. Більше двох пріоритетів розмиває акцент і надмірно збільшує тривалість тренування.</HelpLabel>
         <OptRow multi options={Object.entries(MUSCLE)} value={p.priority} onChange={changePriority} />
         <div className="tk-hint">Пріоритетна група отримує додаткову вправу і ставиться на початок дня, поки ти свіжий. Ручна зміна створює власний акцент.</div>
       </div>
@@ -571,7 +642,7 @@ function Wizard({ p, set, onBuild }) {
       </div>
 
       <div className="tk-field">
-        <span className="tk-lbl">Врахувати обмеження</span>
+        <HelpLabel label="Врахувати обмеження">Позначена зона прибирає вправи, які частіше її подразнюють, але це не діагноз і не лікування. Якщо рух викликає гострий або наростаючий біль, зупинись і звернися до фахівця.</HelpLabel>
         <OptRow multi options={[['knee', 'Коліна'], ['lowback', 'Поперек'], ['shoulder', 'Плечі']]} value={p.limits} onChange={(v) => set({ limits: v })} />
       </div>
 
@@ -1049,6 +1120,8 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
           </div>
         )}
 
+        <ReadingGuide />
+
         <div className="tk-card">
           <div className="tk-eyebrow">Макроцикл · висота стовпчика = обсяг тижня</div>
           <div className="tk-ramp">
@@ -1156,4 +1229,4 @@ export default function TrainingConstructor() {
   );
 }
 
-export { HomeEquipmentPanel };
+export { HelpLabel, ReadingGuide, HomeEquipmentPanel };
