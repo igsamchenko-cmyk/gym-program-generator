@@ -47,11 +47,11 @@ describe('регресія: причини вибору (why) відповіда
 });
 
 describe('регресія: unilateral-позначка застосована лише до реально односторонніх вправ', () => {
-  it('усі позначені uni:true вправи належать патернам lunge/glute_iso/h_pull/cuff', () => {
+  it('усі позначені uni:true вправи належать патернам з окремою стороною', () => {
     const uniExercises = EX.filter((e) => e.uni);
     expect(uniExercises.length).toBeGreaterThan(0);
     uniExercises.forEach((e) => {
-      expect(['lunge', 'glute_iso', 'h_pull', 'cuff']).toContain(e.p);
+      expect(['squat', 'lunge', 'hinge', 'calves', 'glute_iso', 'h_pull', 'cuff']).toContain(e.p);
     });
   });
 });

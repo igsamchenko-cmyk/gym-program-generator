@@ -6,10 +6,11 @@ import { EX } from './data/exercises.js';
 import { REGION, REGION_GROUP, MUSCLE, EQUIP_SETS, WEEKDAYS, SLOW_RECOVERY, LIMIT_LABEL } from './data/labels.js';
 const JOINT_FRIENDLY = new Set(['seated_lat_raise', 'cable_lat_raise', 'ez_curl', 'db_hammer', 'vgrip_pulldown', 'hammer_row',
   'chest_row', 'machine_press', 'leg_press', 'hack_squat', 'rope_overhead', 'reverse_pecdeck', 'cable_face_pull', 'band_face_pull',
-  'hyperext', 'seated_calf', 'db_incline', 'goblet', 'rdl_db', 'cable_row', 'lat_pulldown', 'machine_shoulder', 'leg_curl', 'leg_ext', 'low_high_fly']);
+  'hyperext', 'seated_calf', 'db_incline', 'goblet', 'rdl_db', 'cable_row', 'lat_pulldown', 'machine_shoulder', 'leg_curl', 'leg_ext', 'low_high_fly',
+  'pec_deck', 'machine_lat_raise', 'seated_leg_curl', 'standing_calf', 'machine_pullover', 't_bar_row', 'preacher_curl', 'db_seated_calf']);
 // Рухи з більшою вимогою до стабілізації тулуба. Це не список «небезпечних» вправ:
 // він потрібен лише для ранжування рівноцінних варіантів.
-const AXIAL_HEAVY = new Set(['bb_squat', 'front_squat', 'deadlift', 'rdl_bb', 'ohp', 'bb_row', 'band_gm']);
+const AXIAL_HEAVY = new Set(['bb_squat', 'front_squat', 'deadlift', 'trap_bar_deadlift', 'rdl_bb', 'ohp', 'bb_row', 'band_gm']);
 // Вправи, для яких технічної складності недостатньо як критерію: вони ще й
 // вимагають попередньої відносної сили, контролю або складного налаштування.
 const REQUIRES_FOUNDATION = new Set([
@@ -17,7 +18,8 @@ const REQUIRES_FOUNDATION = new Set([
   'db_pullover', 'rdl_bb', 'rdl_db', 'hip_thrust', 'band_gm',
   'db_lunge', 'bulgarian', 'split_band', 'slider_curl', 'nordic',
   'single_bridge', 'db_skull', 'close_pushup', 'bench_dips',
-  'hanging_leg', 'incline_fly',
+  'hanging_leg', 'incline_fly', 'decline_pushup', 'bw_skull', 'db_hip_thrust',
+  'pistol_box', 'sissy_squat', 'elevated_pike', 'bw_sl_rdl', 'slider_rollout',
 ]);
 const ADVANCED_ONLY = new Set(['weighted_dips']);
 const LEVEL_RANK = { beg: 0, int: 1, adv: 2 };
@@ -47,7 +49,8 @@ const AVOID = {
 const AVOID_IDS = {
   dips: new Set(['weighted_dips', 'bench_dips']),
   lunges: new Set(['db_lunge', 'rev_lunge_bw', 'bulgarian', 'split_band']),
-  floor: new Set(['pushup', 'pushup_band', 'pike_pushup', 'glute_bridge', 'superman', 'slider_curl', 'single_bridge', 'bw_rear_raise', 'close_pushup', 'plank', 'side_plank', 'dead_bug']),
+  floor: new Set(['pushup', 'pushup_band', 'pike_pushup', 'glute_bridge', 'superman', 'slider_curl', 'single_bridge', 'bw_rear_raise', 'close_pushup', 'plank', 'side_plank', 'dead_bug',
+    'decline_pushup', 'slider_rollout', 'elevated_pike', 'bw_skull']),
 };
 
 /* слот = патерн[@підспецифікація]; порядок у списку — чернетка, далі його впорядковує движок */
@@ -321,6 +324,12 @@ function isExerciseAllowed(ex, p) {
   return true;
 }
 
+// manualOnly-вправи доступні у списку ручних замін, але не потрапляють
+// до автоматично згенерованої програми (наприклад, рідкісний треп-гриф).
+function isAutoSelectable(ex, p) {
+  return !!ex && !ex.manualOnly && isExerciseAllowed(ex, p);
+}
+
 const slotSpec = (slot) => typeof slot === 'string' ? slot : slot.spec;
 const slotGroup = (slot) => typeof slot === 'string' ? null : slot.group;
 const slotPattern = (slot) => slotSpec(slot).split('@')[0].split('!')[0];
@@ -427,7 +436,7 @@ function buildPlan(pRaw) {
     const why = [];
     const cut = (fn, text) => { const r = pool.filter(fn); if (r.length && r.length < pool.length) { pool = r; if (text) why.push(text); } else if (r.length) pool = r; };
 
-    let pool = EX.filter((e) => e.p === pattern && allowed.has(e.eq));
+    let pool = EX.filter((e) => e.p === pattern && allowed.has(e.eq) && !e.manualOnly);
     if (p.limits.length) {
       const before = pool.length;
       pool = pool.filter((e) => !(e.av || []).some((a) => p.limits.includes(a)));
@@ -475,7 +484,7 @@ function buildPlan(pRaw) {
     }
 
     const preferredPatterns = new Map((GROUP_SLOTS[group] || []).map((spec, i) => [slotPattern(spec), i]));
-    const pool = EX.filter((ex) => !usedDay.has(ex.id) && exerciseCoversGroup(ex, group) && isExerciseAllowed(ex, p));
+    const pool = EX.filter((ex) => !usedDay.has(ex.id) && exerciseCoversGroup(ex, group) && isAutoSelectable(ex, p));
     if (!pool.length) return { ex: null, why: [] };
     const score = (ex) => (ex.m === group ? 0 : 20)
       + (preferredPatterns.has(ex.p) ? preferredPatterns.get(ex.p) : 10)
@@ -908,7 +917,7 @@ export {
   GROUP_SLOTS, GROUP_WEIGHT, GROUP_CAP, customSlots, dayLabel,
   PRIORITY_PATTERN, FALLBACK, MACRO, LOADS, HEAVY_LOAD, round2, loadFor, isLoadable,
   REPS, VOLUME_TARGET, MUSCLE_CAP, PROGRESSION, ageFlags, stableBias,
-  focusForPriority, isAvoidedExercise, exercisePreferenceScore, preferExercises, maxDifficultyFor, meetsExperienceGate, isExerciseAllowed,
+  focusForPriority, isAvoidedExercise, exercisePreferenceScore, preferExercises, maxDifficultyFor, meetsExperienceGate, isExerciseAllowed, isAutoSelectable,
   slotCount, baseSets, LAST_IN_DAY, orderScore, HEAVY_RANK, markHeavy, buildPlan,
   isHeavy, setsFor, rirFor, repsFor, tempoFor, restFor, targetFor, weeklyVolume,
   restSec, sessionMinutes, scheduleWarnings, frequency, techMarks, WARMUP_GUIDES, warmup,

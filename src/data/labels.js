@@ -24,7 +24,7 @@ const REGION_GROUP = {
 const MUSCLE = { chest: 'Груди', back: 'Спина', quads: 'Квадрицепс', hams: 'Задня поверхня стегна', glutes: 'Сідничні', delts: 'Дельти', biceps: 'Біцепс', triceps: 'Трицепс', calves: 'Литки', core: 'Прес / кор' };
 
 
-const UNI_SIDE = { lunge: 'ногу', glute_iso: 'ногу', h_pull: 'руку', cuff: 'руку' };
+const UNI_SIDE = { squat: 'ногу', lunge: 'ногу', hinge: 'ногу', calves: 'ногу', glute_iso: 'ногу', h_pull: 'руку', cuff: 'руку' };
 
 
 const uniLabel = (ex) => (ex.uni ? 'на кожну ' + (UNI_SIDE[ex.p] || 'сторону') : '');

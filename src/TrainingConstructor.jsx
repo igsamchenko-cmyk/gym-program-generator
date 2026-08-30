@@ -472,6 +472,7 @@ function ExRow({ item, idx, week, plan, heavy, tech, onSwap, anchors, onAnchor, 
           {item.ex.n}
           {heavy && <span className="tk-badge tk-b-heavy">ВАЖКИЙ БЛОК</span>}
           {item.boost && <span className="tk-badge tk-b-prio">ПРІОРИТЕТ</span>}
+          {item.ex.manualOnly && <span className="tk-badge tk-b-tech">ЛИШЕ РУЧНА ЗАМІНА</span>}
         </div>
         <div className="tk-presc">
           {sets} × {repsFor(item, p.goal, week, heavy)}{item.ex.uni ? ' ' + uniLabel(item.ex) : ''} <i>·</i> RIR {rirFor(item, week, plan)} <i>·</i> темп {tempo} <i>·</i> {restFor(item, plan, heavy)}
