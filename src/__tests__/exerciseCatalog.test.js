@@ -9,7 +9,7 @@ const ADDED_IDS = [
   'bw_sl_rdl', 'db_hip_thrust', 'db_seated_calf', 'band_straight_arm',
   'incline_db_curl', 'bb_incline', 'pec_deck', 'machine_lat_raise',
   'seated_leg_curl', 'standing_calf', 'preacher_curl', 'machine_pullover',
-  't_bar_row', 'slider_rollout', 'sissy_squat', 'pistol_box',
+  't_bar_row', 'slider_rollout', 'pistol_box',
   'elevated_pike', 'trap_bar_deadlift',
 ];
 
@@ -28,10 +28,11 @@ function profile(overrides = {}) {
 }
 
 describe('каталог додаткових вправ', () => {
-  it('містить 120 унікальних вправ і всі 22 нові записи', () => {
-    expect(EX).toHaveLength(120);
+  it('містить 119 унікальних вправ і всі 21 новий запис', () => {
+    expect(EX).toHaveLength(119);
     expect(new Set(EX.map((exercise) => exercise.id)).size).toBe(EX.length);
     ADDED_IDS.forEach((id) => expect(EX.some((exercise) => exercise.id === id), id).toBe(true));
+    expect(EX.some((exercise) => exercise.id === 'sissy_squat')).toBe(false);
   });
 
   it('для кожної вправи існує непорожня локальна схема', () => {
@@ -59,7 +60,7 @@ describe('каталог додаткових вправ', () => {
   it('складні варіанти не пропонуються початківцям', () => {
     const beginnerHome = profile({ level: 'beg', place: 'home', bar: false });
     ['decline_pushup', 'bw_skull', 'bw_sl_rdl', 'db_hip_thrust', 'slider_rollout',
-      'sissy_squat', 'pistol_box', 'elevated_pike'].forEach((id) => {
+      'pistol_box', 'elevated_pike'].forEach((id) => {
       const exercise = EX.find((item) => item.id === id);
       expect(isExerciseAllowed(exercise, beginnerHome), id).toBe(false);
     });

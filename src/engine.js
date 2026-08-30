@@ -19,7 +19,7 @@ const REQUIRES_FOUNDATION = new Set([
   'db_lunge', 'bulgarian', 'split_band', 'slider_curl', 'nordic',
   'single_bridge', 'db_skull', 'close_pushup', 'bench_dips',
   'hanging_leg', 'incline_fly', 'decline_pushup', 'bw_skull', 'db_hip_thrust',
-  'pistol_box', 'sissy_squat', 'elevated_pike', 'bw_sl_rdl', 'slider_rollout',
+  'pistol_box', 'elevated_pike', 'bw_sl_rdl', 'slider_rollout',
 ]);
 const ADVANCED_ONLY = new Set(['weighted_dips']);
 const LEVEL_RANK = { beg: 0, int: 1, adv: 2 };
