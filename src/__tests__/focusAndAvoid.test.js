@@ -23,7 +23,9 @@ describe('акцент програми та особисті виключенн
     const html = renderToStaticMarkup(createElement(TrainingConstructor));
     expect(html).toContain('Акцент програми');
     expect(html).toContain('Сідниці та стегна');
-    expect(html).toContain('Не хочу виконувати');
+    expect(html).toContain('Виключити з програми');
+    expect(html).toContain('Без виключень');
+    expect(html).toContain('Необов’язково');
     expect(html).toContain('Вправи на підлозі');
     expect(html).toContain('.tk::before');
     expect(html).toContain('fitness-center-light-v1.jpg');

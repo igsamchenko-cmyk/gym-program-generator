@@ -88,6 +88,28 @@ const CSS = `
 .tk-opt{font:inherit;font-size:13px;padding:8px 13px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:2px;cursor:pointer;}
 .tk-opt:hover{border-color:var(--link);}
 .tk-opt[aria-pressed="true"]{background:var(--deep);border-color:var(--deep);color:#fff;}
+.tk-exclude{border:1px solid var(--line);border-radius:3px;background:var(--card);overflow:hidden;}
+.tk-exclude summary{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:13px 14px;cursor:pointer;list-style:none;}
+.tk-exclude summary::-webkit-details-marker{display:none;}
+.tk-exclude summary:focus-visible{outline:2px solid var(--link);outline-offset:-2px;}
+.tk-exclude-heading{display:flex;flex-direction:column;gap:2px;min-width:0;}
+.tk-exclude-heading strong{font-size:13px;}
+.tk-exclude-heading small{font-size:11px;font-weight:400;color:var(--steel);}
+.tk-exclude-state{display:flex;align-items:center;gap:8px;flex-shrink:0;font-size:11px;color:var(--steel);white-space:nowrap;}
+.tk-exclude-state::after{content:"⌄";font-size:15px;line-height:1;transition:transform .15s ease;}
+.tk-exclude[open] .tk-exclude-state::after{transform:rotate(180deg);}
+.tk-exclude-body{padding:12px 14px 14px;border-top:1px solid var(--line);}
+.tk-exclude-intro{font-size:12px;color:var(--steel);margin:0 0 10px;}
+.tk-exclude-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px;}
+.tk-exclude-item{font:inherit;display:flex;align-items:flex-start;gap:10px;padding:11px 12px;text-align:left;border:1px solid var(--line);border-radius:3px;background:var(--card);color:var(--ink);cursor:pointer;}
+.tk-exclude-item:hover{border-color:var(--link);}
+.tk-exclude-item[aria-pressed="true"]{border-color:var(--deep);background:var(--surf);}
+.tk-exclude-box{display:grid;place-items:center;width:18px;height:18px;flex:0 0 18px;margin-top:1px;border:1px solid var(--line);border-radius:2px;font-size:12px;color:#fff;}
+.tk-exclude-item[aria-pressed="true"] .tk-exclude-box{border-color:var(--deep);background:var(--deep);}
+.tk-exclude-copy{display:flex;flex-direction:column;gap:2px;}
+.tk-exclude-copy b{font-size:12px;font-weight:600;}
+.tk-exclude-copy small{font-size:11px;color:var(--steel);line-height:1.35;}
+.tk-exclude-warning{font-size:11px;color:var(--hot);margin:10px 0 0;}
 .tk-opt:focus-visible,.tk-wk:focus-visible,.tk-day:focus-visible,.tk-mini:focus-visible{outline:2px solid var(--link);outline-offset:2px;}
 .tk-num{font:inherit;font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',monospace;width:88px;padding:9px 11px;border:1px solid var(--line);border-radius:2px;background:var(--card);color:var(--ink);}
 .tk-cta{font:inherit;font-family:'Arial Black','Segoe UI',system-ui,sans-serif;font-weight:500;font-size:15px;width:100%;padding:15px;background:var(--deep);color:#fff;border:none;border-radius:3px;cursor:pointer;}
@@ -225,6 +247,36 @@ function OptRow({ options, value, onChange, multi }) {
         <button key={k} type="button" className="tk-opt" aria-pressed={active(k)} onClick={() => toggle(k)}>{label}</button>
       ))}
     </div>
+  );
+}
+
+function ExclusionMenu({ value, onChange, floorWarning }) {
+  const toggle = (key) => onChange(value.includes(key) ? value.filter((item) => item !== key) : [...value, key]);
+  return (
+    <details className="tk-exclude" open={value.length > 0 ? true : undefined}>
+      <summary>
+        <span className="tk-exclude-heading">
+          <strong>Виключити з програми</strong>
+          <small>Необов’язково — відкрий, якщо певні рухи тобі не підходять</small>
+        </span>
+        <span className="tk-exclude-state">{value.length ? `Обрано: ${value.length}` : 'Без виключень'}</span>
+      </summary>
+      <div className="tk-exclude-body">
+        <p className="tk-exclude-intro">Позначені категорії не потраплять ні в готову програму, ні до списку ручних замін.</p>
+        <div className="tk-exclude-grid">
+          {Object.entries(AVOID).map(([key, option]) => {
+            const selected = value.includes(key);
+            return (
+              <button key={key} type="button" className="tk-exclude-item" aria-pressed={selected} onClick={() => toggle(key)}>
+                <span className="tk-exclude-box" aria-hidden="true">{selected ? '✓' : ''}</span>
+                <span className="tk-exclude-copy"><b>{option.label}</b><small>{option.note}</small></span>
+              </button>
+            );
+          })}
+        </div>
+        {floorWarning && <p className="tk-exclude-warning">Для тренувань лише з вагою тіла це суттєво скоротить вибір вправ.</p>}
+      </div>
+    </details>
   );
 }
 
@@ -431,12 +483,8 @@ function Wizard({ p, set, onBuild }) {
       </div>
 
       <div className="tk-field">
-        <span className="tk-lbl">Не хочу виконувати</span>
-        <OptRow multi options={Object.entries(AVOID).map(([k, v]) => [k, v.label])} value={p.avoid} onChange={(avoid) => set({ avoid })} />
-        <div className="tk-hint">
-          Обрані типи повністю виключаються і з програми, і з ручних замін.
-          {p.place === 'bw' && p.avoid.includes('floor') ? ' При тренуваннях лише з вагою тіла це може суттєво скоротити вибір вправ.' : ''}
-        </div>
+        <ExclusionMenu value={p.avoid} onChange={(avoid) => set({ avoid })}
+          floorWarning={p.place === 'bw' && p.avoid.includes('floor')} />
       </div>
 
       <div className="tk-field">
