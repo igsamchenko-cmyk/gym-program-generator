@@ -440,7 +440,7 @@ function Wizard({ p, set, onBuild }) {
       </div>
 
       <div className="tk-field">
-        <span className="tk-lbl">Що береже</span>
+        <span className="tk-lbl">Врахувати обмеження</span>
         <OptRow multi options={[['knee', 'Коліна'], ['lowback', 'Поперек'], ['shoulder', 'Плечі']]} value={p.limits} onChange={(v) => set({ limits: v })} />
       </div>
 
