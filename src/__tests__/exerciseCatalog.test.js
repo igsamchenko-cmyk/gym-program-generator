@@ -74,6 +74,8 @@ describe('каталог додаткових вправ', () => {
       .toBe('exercise-media/leg-press-v2.webp');
     expect(EX.find((exercise) => exercise.id === 'leg_press_calf').media.src)
       .toBe('exercise-media/leg-press-calf-v2.webp');
+    expect(EX.find((exercise) => exercise.id === 'rope_overhead').media.src)
+      .toBe('exercise-media/rope-overhead-v2.webp');
   });
 
   it('усі локальні схеми є справжніми WebP розміром 1200×800', () => {
