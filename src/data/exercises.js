@@ -99,7 +99,7 @@ const EX = [
   { id: 'goblet', rg: 'quad', tp: '3-0-2', sd: 1, tech: 0, n: 'Гоблет-присідання з гантеллю', p: 'squat', m: 'quads', s: ['glutes'], eq: 'dumbbell', t: 'comp', d: 1, st: 1,
     cue: 'Тримаєш гантель біля грудей — вага спереду сама виправляє техніку. Сідаєш глибоко, спина пряма.',
     err: 'Нахил корпусу вперед, коліна всередину.', video: '' },
-  { id: 'leg_press', rg: 'quad', tp: '3-0-2', sd: 0, tech: 1, n: 'Жим ногами в тренажері', p: 'squat', m: 'quads', s: ['glutes'], eq: 'machine', t: 'comp', d: 1, st: 1,
+  { id: 'leg_press', mediaFile: 'leg-press-v2.webp', rg: 'quad', tp: '3-0-2', sd: 0, tech: 1, n: 'Жим ногами в тренажері', p: 'squat', m: 'quads', s: ['glutes'], eq: 'machine', t: 'comp', d: 1, st: 1,
     cue: 'Стопи на ширині плечей у середині платформи. Опускаєш до кута ~90°, поперек не відривається від спинки.',
     err: 'Відрив таза внизу, повне випрямляння колін із «замком».', video: '' },
   { id: 'bw_squat', rg: 'quad', tp: '3-0-2', sd: 1, tech: 0, n: 'Присідання вагою тіла', p: 'squat', m: 'quads', s: ['glutes'], eq: 'bodyweight', t: 'comp', d: 1, st: 0,
@@ -320,7 +320,7 @@ const EX = [
   { id: 'seated_calf', rg: 'calf_soleus', tp: '2-2-2', sd: 0, tech: 1, n: 'Підйоми на носки сидячи', p: 'calves', m: 'calves', s: [], eq: 'machine', t: 'iso', d: 1, st: 0,
     cue: 'Коліна зігнуті 90° — це вимикає литковий і навантажує камбалоподібний. Пауза внизу і вгорі.',
     err: 'Пружинистий темп, коротка амплітуда.', video: '' },
-  { id: 'leg_press_calf', rg: 'calf_gastro', tp: '2-2-2', sd: 0, tech: 1, n: 'Жим носками в тренажері для ніг', p: 'calves', m: 'calves', s: [], eq: 'machine', t: 'iso', d: 1, st: 0,
+  { id: 'leg_press_calf', mediaFile: 'leg-press-calf-v2.webp', rg: 'calf_gastro', tp: '2-2-2', sd: 0, tech: 1, n: 'Жим носками в тренажері для ніг', p: 'calves', m: 'calves', s: [], eq: 'machine', t: 'iso', d: 1, st: 0,
     cue: 'Коліна майже прямі — акцент на литковий. Повне розтягнення внизу, пауза 2 сек.',
     err: 'Згинання колін, гонитва за вагою в кінці сесії.', video: '' },
   { id: 'ez_curl', rg: 'bi', tp: '2-1-2', sd: 1, tech: 1, n: 'Згинання рук з вигнутим грифом (EZ)', p: 'biceps', m: 'biceps', s: [], eq: 'barbell', t: 'iso', d: 1, st: 0,
@@ -403,10 +403,11 @@ const EX = [
     err: 'Старт поза центром рами, ривок руками, округлення спини, перетворення руху на глибокий присід.', video: '' },
 ];
 
-// Ілюстрації лежать локально: імʼя файла повторює id з дефісами замість підкреслень.
+// Ілюстрації лежать локально: за замовчуванням імʼя файла повторює id з дефісами.
+// mediaFile дозволяє змінити URL після виправлення, щоб PWA не показувала старий кеш.
 EX.forEach((exercise) => {
   exercise.media = {
-    src: `exercise-media/${exercise.id.replaceAll('_', '-')}.webp`,
+    src: `exercise-media/${exercise.mediaFile ?? `${exercise.id.replaceAll('_', '-')}.webp`}`,
     alt: `${exercise.n}: схематична демонстрація початкової та кінцевої фаз руху`,
   };
 });

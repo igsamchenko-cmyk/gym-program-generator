@@ -70,6 +70,10 @@ describe('каталог додаткових вправ', () => {
       expect(existsSync(file), `${exercise.id}: ${file}`).toBe(true);
       expect(statSync(file).size, exercise.id).toBeGreaterThan(0);
     });
+    expect(EX.find((exercise) => exercise.id === 'leg_press').media.src)
+      .toBe('exercise-media/leg-press-v2.webp');
+    expect(EX.find((exercise) => exercise.id === 'leg_press_calf').media.src)
+      .toBe('exercise-media/leg-press-calf-v2.webp');
   });
 
   it('усі локальні схеми є справжніми WebP розміром 1200×800', () => {
