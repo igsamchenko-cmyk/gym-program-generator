@@ -40,7 +40,7 @@ describe('buildPlan — структурна коректність', () => {
     }
   });
 
-  it('вправи з протипоказаннями ніколи не потрапляють у план з відповідним обмеженням', () => {
+  it('автоматичний план не пропонує варіанти, позначені для чутливої зони', () => {
     for (const limit of ['knee', 'lowback', 'shoulder']) {
       const plan = buildPlan(profile({ level: 'adv', days: 4, place: 'gym', bar: true, limits: [limit] }));
       const bad = plan.days.flatMap((d) => d.items).filter((it) => (it.ex.av || []).includes(limit));
@@ -129,15 +129,11 @@ describe('buildPlan — захист від пошкоджених профіл�
   });
 });
 
-describe('ageFlags — вікові пороги', () => {
-  it('прапорці вмикаються на очікуваних межах', () => {
+describe('ageFlags — лише підлітковий запобіжник', () => {
+  it('дорослий вік не перемикає вправи через довільні пороги', () => {
     expect(ageFlags(17).teen).toBe(true);
     expect(ageFlags(18).teen).toBe(false);
-    expect(ageFlags(29).cuff).toBe(false);
-    expect(ageFlags(30).cuff).toBe(true);
-    expect(ageFlags(34).jointCare).toBe(false);
-    expect(ageFlags(35).jointCare).toBe(true);
-    expect(ageFlags(39).axialCap).toBe(false);
-    expect(ageFlags(40).axialCap).toBe(true);
+    expect(ageFlags(35)).toEqual({ teen: false });
+    expect(ageFlags(70)).toEqual({ teen: false });
   });
 });

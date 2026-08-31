@@ -273,14 +273,8 @@ function Toast({ toast }) {
 function ageNote(p) {
   const f = ageFlags(p.age);
   if (f.teen) return 'До 18: RIR не нижче 2, обсяг −20 %, технічно складні рухи прибрано, тест максимумів не призначається.';
-  const on = [];
-  if (f.midlife) on.push('для загального здоровʼя та гіпертрофії пріоритет мають гак, жим ногами, румунська тяга й рухи з опорою');
-  if (p.goal === 'strength' && p.level === 'adv' && p.balance === 'steady') on.push('досвід і силова ціль зберігають специфічні вправи зі штангою');
-  if (f.longWarm) on.push('подовжена розминка');
-  if (f.older) on.push('у розминку додано безпечну роботу на баланс');
-  return on.length
-    ? 'Вік не є забороною сам по собі. Увімкнено: ' + on.join(', ') + '.'
-    : 'Вік не накладає автоматичних заборон; вибір визначають стаж, ціль, баланс і зазначені обмеження.';
+  if (p.balance !== 'steady') return 'Вправи з опорою отримують перевагу через зазначений контроль рівноваги, а не через паспортний вік.';
+  return 'Для дорослих вік не забороняє вправи й не змінює їх автоматично; вибір визначають стаж, ціль, контроль руху та чутливі зони.';
 }
 
 function OptRow({ options, value, onChange, multi }) {
@@ -506,12 +500,7 @@ function Wizard({ p, set, onBuild }) {
     if (w.length > p.days) w = w.slice(w.length - p.days);
     set({ weekdays: w });
   };
-  const changeSex = (sex) => {
-    const followsSuggestedFocus = p.focus === SEX[p.sex].focus;
-    if (!followsSuggestedFocus) { set({ sex }); return; }
-    const focus = SEX[sex].focus;
-    set({ sex, focus, priority: FOCUS[focus].priority.slice() });
-  };
+  const changeSex = (sex) => set({ sex });
   const changeFocus = (focus) => set({ focus, priority: FOCUS[focus].priority.slice() });
   const changePriority = (priority) => {
     const limited = priority.slice(-2);
@@ -642,7 +631,7 @@ function Wizard({ p, set, onBuild }) {
       </div>
 
       <div className="tk-field">
-        <HelpLabel label="Врахувати обмеження">Позначена зона прибирає вправи, які частіше її подразнюють, але це не діагноз і не лікування. Якщо рух викликає гострий або наростаючий біль, зупинись і звернися до фахівця.</HelpLabel>
+        <HelpLabel label="Чутливі зони">Автоматичний план тимчасово обере інші варіанти для позначеної зони. Це не означає, що всі рухи для неї небезпечні: у ручній заміні вони лишаються доступними. Гострий або наростаючий біль — привід зупинитися й звернутися до фахівця.</HelpLabel>
         <OptRow multi options={[['knee', 'Коліна'], ['lowback', 'Поперек'], ['shoulder', 'Плечі']]} value={p.limits} onChange={(v) => set({ limits: v })} />
       </div>
 
@@ -769,8 +758,7 @@ function VolumePanel({ plan, week }) {
       </div>
       <p className="tk-hint" style={{ marginTop: 14 }}>
         Друге число — стеля для рівня «{LEVEL_LABEL[plan.profile.level]}»; вона різна по групах. Другий рядок під групою — розподіл по підспецифікаціях:
-        ширина спини і товщина ростуть від різних рухів, литковий вимагає прямих колін, а камбалоподібний — зігнутих на 90°.
-        {(SEX[plan.profile.sex] || SEX.x).cap.glutes ? ' Стелю на низ тіла піднято відповідно до обраної статі.' : ''}
+        різні тяги змінюють акцент роботи спини, а положення коліна змінює відносний внесок литкового й камбалоподібного м’язів.
       </p>
     </div>
   );
@@ -1201,9 +1189,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
           <div className="tk-rule"><b>Акцент програми — {(FOCUS[profile.focus] || CUSTOM_FOCUS).label}</b>{(FOCUS[profile.focus] || CUSTOM_FOCUS).note}</div>
           {profile.avoid.length > 0 && <div className="tk-rule"><b>Особисті виключення</b>Не потрапляють у програму та заміни: {profile.avoid.map((key) => AVOID[key].label.toLowerCase()).join(', ')}.</div>}
           <div className="tk-rule"><b>Ліміт інтенсивних технік</b>Дроп-сети й часткові повтори в розтягнутій позиції — максимум 2 підходи на всю сесію, лише в ізоляції, ніколи в базових рухах. На делоад-тижнях прибрати повністю. За межею відмови втома росте швидше за стимул.</div>
-          {profile.sex !== 'x' && <div className="tk-rule"><b>Поправка за статтю ({SEX[profile.sex].label})</b>{SEX[profile.sex].note}</div>}
-          {profile.sex === 'f' && profile.age >= 45 && <div className="tk-rule"><b>Після 45</b>Силові з великою вагою — один із небагатьох інструментів, що впливають на щільність кісткової тканини. Це аргумент не знижувати ваги з віком, а зберігати важкі базові рухи в програмі, зменшуючи натомість обсяг допоміжної роботи.</div>}
-          {(view.flags.midlife || profile.balance !== 'steady') && <div className="tk-rule"><b>Індивідуальний вибір вправ ({profile.age} р.)</b>{ageNote(profile)}</div>}
+          {(view.flags.teen || profile.balance !== 'steady') && <div className="tk-rule"><b>Індивідуальний вибір вправ</b>{ageNote(profile)}</div>}
         </div>
 
         <p className="tk-foot">Це навчальний прототип, а не медична порада. Різкий біль, оніміння чи запаморочення — привід зупинити тренування й звернутися до лікаря.</p>

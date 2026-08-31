@@ -56,11 +56,12 @@ function webpDimensions(buffer) {
 }
 
 describe('каталог додаткових вправ', () => {
-  it('містить 119 унікальних вправ і всі 21 новий запис', () => {
-    expect(EX).toHaveLength(119);
+  it('містить 118 унікальних вправ і всі 21 новий запис', () => {
+    expect(EX).toHaveLength(118);
     expect(new Set(EX.map((exercise) => exercise.id)).size).toBe(EX.length);
     ADDED_IDS.forEach((id) => expect(EX.some((exercise) => exercise.id === id), id).toBe(true));
     expect(EX.some((exercise) => exercise.id === 'sissy_squat')).toBe(false);
+    expect(EX.some((exercise) => exercise.id === 'bench_dips')).toBe(false);
   });
 
   it('для кожної вправи існує непорожня локальна схема', () => {
@@ -100,6 +101,21 @@ describe('каталог додаткових вправ', () => {
       const plan = buildPlan(profile({ days: 6, seed, priority: ['hams', 'back'] }));
       expect(plan.days.flatMap((day) => day.items).some((item) => item.ex.manualOnly)).toBe(false);
     }
+  });
+
+  it('чутлива зона змінює автоматичний добір, але не оголошує вправу забороненою вручну', () => {
+    const benchPress = EX.find((exercise) => exercise.id === 'bb_bench');
+    const shoulderSensitive = profile({ limits: ['shoulder'] });
+    expect(isExerciseAllowed(benchPress, shoulderSensitive)).toBe(true);
+    expect(isAutoSelectable(benchPress, shoulderSensitive)).toBe(false);
+  });
+
+  it('«Супермен» лишається ручним додатковим варіантом кора', () => {
+    const superman = EX.find((exercise) => exercise.id === 'superman');
+    expect(superman.p).toBe('core');
+    expect(superman.manualOnly).toBe(true);
+    expect(isExerciseAllowed(superman, profile())).toBe(true);
+    expect(isAutoSelectable(superman, profile())).toBe(false);
   });
 
   it('складні варіанти не пропонуються початківцям', () => {

@@ -4,7 +4,9 @@
    ============================================================ */
 import { EX } from './data/exercises.js';
 import { REGION, REGION_GROUP, MUSCLE, EQUIP_SETS, WEEKDAYS, SLOW_RECOVERY, LIMIT_LABEL } from './data/labels.js';
-const JOINT_FRIENDLY = new Set(['seated_lat_raise', 'cable_lat_raise', 'ez_curl', 'db_hammer', 'vgrip_pulldown', 'hammer_row',
+// Стабільні варіанти з опорою або заданою траєкторією. Це не універсальний
+// список «безпечних для суглобів»: комфорт залежить від людини й дозування.
+const STABLE_VARIANTS = new Set(['seated_lat_raise', 'cable_lat_raise', 'ez_curl', 'db_hammer', 'vgrip_pulldown', 'hammer_row',
   'chest_row', 'machine_press', 'leg_press', 'hack_squat', 'rope_overhead', 'reverse_pecdeck', 'cable_face_pull', 'band_face_pull',
   'hyperext', 'seated_calf', 'db_incline', 'goblet', 'rdl_db', 'cable_row', 'lat_pulldown', 'machine_shoulder', 'leg_curl', 'leg_ext', 'low_high_fly',
   'pec_deck', 'machine_lat_raise', 'seated_leg_curl', 'standing_calf', 'machine_pullover', 't_bar_row', 'preacher_curl', 'db_seated_calf']);
@@ -17,7 +19,7 @@ const REQUIRES_FOUNDATION = new Set([
   'pushup', 'pushup_band', 'pike_pushup', 'pullup', 'pullup_band',
   'db_pullover', 'rdl_bb', 'rdl_db', 'hip_thrust', 'band_gm',
   'db_lunge', 'bulgarian', 'split_band', 'slider_curl', 'nordic',
-  'single_bridge', 'db_skull', 'close_pushup', 'bench_dips',
+  'single_bridge', 'db_skull', 'close_pushup',
   'hanging_leg', 'incline_fly', 'decline_pushup', 'bw_skull', 'db_hip_thrust',
   'pistol_box', 'elevated_pike', 'bw_sl_rdl', 'slider_rollout',
 ]);
@@ -41,13 +43,13 @@ const CUSTOM_FOCUS = { label: 'Власний акцент', note: 'Пріори
 
 const AVOID = {
   barbell: { label: 'Вправи зі штангою', note: 'жими, тяги та присідання зі штангою' },
-  dips: { label: 'Бруси та віджимання від лави', note: 'віджимання на брусах і зворотні віджимання' },
+  dips: { label: 'Віджимання на брусах', note: 'звичайні та обтяжені віджимання на брусах' },
   pullups: { label: 'Підтягування та вправи у висі', note: 'підтягування, підйоми ніг та інші рухи у висі' },
   lunges: { label: 'Випади й спліт-присідання', note: 'випади вперед або назад і спліт-присідання' },
   floor: { label: 'Вправи на підлозі', note: 'віджимання, планки та вправи лежачи' },
 };
 const AVOID_IDS = {
-  dips: new Set(['weighted_dips', 'bench_dips']),
+  dips: new Set(['weighted_dips']),
   lunges: new Set(['db_lunge', 'rev_lunge_bw', 'bulgarian', 'split_band']),
   floor: new Set(['pushup', 'pushup_band', 'pike_pushup', 'glute_bridge', 'superman', 'slider_curl', 'single_bridge', 'bw_rear_raise', 'close_pushup', 'plank', 'side_plank', 'dead_bug',
     'decline_pushup', 'slider_rollout', 'elevated_pike', 'bw_skull']),
@@ -55,10 +57,10 @@ const AVOID_IDS = {
 
 /* слот = патерн[@підспецифікація]; порядок у списку — чернетка, далі його впорядковує движок */
 const DAY_SLOTS = {
-  fbA: ['squat', 'h_push@chest_mid', 'h_pull@back_thick', 'hinge', 'side_delt', 'triceps', 'calves@calf_gastro', 'core', 'quad_iso'],
-  fbB: ['hinge', 'h_push@chest_up!comp', 'v_pull@back_width', 'lunge', 'h_push@chest_up!iso', 'rear_delt', 'biceps', 'calves@calf_soleus', 'core'],
+  fbA: ['squat', 'h_push@chest_mid', 'h_pull@back_thick', 'hinge@ham', 'side_delt', 'triceps', 'calves@calf_gastro', 'core', 'quad_iso'],
+  fbB: ['hinge@ham', 'h_push@chest_up!comp', 'v_pull@back_width', 'lunge', 'h_push@chest_up!iso', 'rear_delt', 'biceps', 'calves@calf_soleus', 'core'],
   fbC: ['squat', 'v_push', 'v_pull@back_low', 'h_pull@back_thick', 'side_delt', 'v_pull@back_width!iso', 'triceps', 'biceps', 'core'],
-  fbD: ['hinge', 'h_push@chest_mid', 'h_pull@back_thick', 'lunge', 'v_push', 'rear_delt', 'biceps', 'calves@calf_gastro', 'core'],
+  fbD: ['hinge@ham', 'h_push@chest_mid', 'h_pull@back_thick', 'lunge', 'v_push', 'rear_delt', 'biceps', 'calves@calf_gastro', 'core'],
   upper: ['h_push@chest_mid', 'v_pull@back_width', 'v_push', 'h_pull@back_thick', 'side_delt', 'triceps', 'biceps', 'rear_delt'],
   lower: ['squat', 'hinge', 'lunge', 'quad_iso', 'ham_iso', 'calves@calf_gastro', 'core', 'glute_iso'],
   push: ['h_push@chest_mid', 'v_push', 'h_push@chest_up', 'side_delt', 'triceps@tri_long', 'core', 'triceps'],
@@ -75,17 +77,16 @@ function splitForProfile(p) {
   if (p.programStyle === 'split' && BODY_PART_SPLITS[p.days]) return BODY_PART_SPLITS[p.days];
   return SPLITS[p.days];
 }
-/* Стать змінює три речі, і кожна спирається на дані, а не на звичку:
-   1) стелю обсягу — при однаковому відсотку від максимуму жінки в середньому стійкіші до втоми
-      й швидше відновлюються між підходами, тому низ тіла витримує більше робочих підходів;
-   2) відпочинок в ізоляції — з тієї ж причини він коротший;
-   3) стартові пріоритети — це усереднена преференція, а НЕ фізіологічна вимога, і її можна змінити. */
+/* Стать зберігається як необов'язкова інформація профілю, але не змінює
+   пріоритети, обсяг, відпочинок або доступність вправ. Ці параметри точніше
+   визначаються ціллю, стажем, відновленням і особистими уподобаннями. */
 const SEX = {
-  m: { label: 'Чоловік', focus: 'upper', prio: ['back', 'chest'], cap: {}, restIso: '60–90 с',
-       note: 'Стартово запропоновано акцент на верх тіла, але стать не визначає силу, технічну готовність або обовʼязковий набір вправ.' },
-  f: { label: 'Жінка', focus: 'glutes', prio: ['glutes', 'hams'], cap: { glutes: 1.2, hams: 1.15, quads: 1.1 }, restIso: '45–75 с',
-       note: 'Стартово запропоновано акцент на сідниці та стегна. Це видимий профіль, який можна змінити; складність вправ однаково визначають стаж, контроль руху й особисті побажання.' },
-  x: { label: 'Не вказувати', focus: 'balanced', prio: [], cap: {}, restIso: '60–90 с', note: 'Нейтральні налаштування: збалансований акцент, базова стеля обсягу й базовий відпочинок.' },
+  m: { label: 'Чоловік', focus: 'balanced', prio: [], cap: {}, restIso: '60–90 с',
+       note: 'Стать не змінює вправи, обсяг або відпочинок. Акцент програми налаштовується окремо за твоєю ціллю.' },
+  f: { label: 'Жінка', focus: 'balanced', prio: [], cap: {}, restIso: '60–90 с',
+       note: 'Стать не змінює вправи, обсяг або відпочинок. Акцент програми налаштовується окремо за твоєю ціллю.' },
+  x: { label: 'Не вказувати', focus: 'balanced', prio: [], cap: {}, restIso: '60–90 с',
+       note: 'Нейтральні налаштування; програму визначають ціль, стаж, відновлення та особисті уподобання.' },
 };
 
 /* Патерни, з яких збирається день у власній розкладці. Порядок усередині групи —
@@ -205,23 +206,13 @@ const PROGRESSION = {
 function ageFlags(age) {
   return {
     teen: age < 18,
-    midlife: age >= 35,
-    older: age >= 60,
-    cuff: age >= 30,
-    jointCare: age >= 35,
-    axialCap: age >= 40,
-    longWarm: age >= 45,
   };
 }
 
 function stableBias(p) {
-  let bias = p.age >= 60 ? 4 : p.age >= 50 ? 3 : p.age >= 35 ? 2 : 0;
-  if (p.level === 'beg') bias += 2;
+  let bias = p.level === 'beg' ? 2 : 0;
   if (p.balance === 'cautious') bias += 2;
   if (p.balance === 'support') bias += 4;
-  // Для досвідченого силовика специфічність руху важливіша за зручність тренажера.
-  // Вік при цьому не є автоматичною забороною.
-  if (p.goal === 'strength' && p.level === 'adv' && p.balance === 'steady') bias = Math.max(0, bias - 3);
   return bias;
 }
 
@@ -247,24 +238,9 @@ function exercisePreferenceScore(ex, p) {
   if (bias > 0) {
     score += (ex.st || 0) * bias;
     score += Math.max(0, (ex.d || 1) - 1) * bias * 0.35;
-    if (JOINT_FRIENDLY.has(ex.id)) score -= bias * 0.55;
+    if (STABLE_VARIANTS.has(ex.id)) score -= bias * 0.55;
     if (AXIAL_HEAVY.has(ex.id)) score += bias * 0.8;
     if (ex.eq === 'machine' || ex.eq === 'cable') score -= bias * 0.35;
-  }
-
-  // Для загального здоров'я та гіпертрофії після 35 вибираємо вправи з таким
-  // самим тренувальним ефектом, але меншою технічною й системною ціною.
-  const generalMidlife = p.age >= 35 && !(p.goal === 'strength' && p.level === 'adv' && p.balance === 'steady');
-  if (generalMidlife) {
-    if (ex.id === 'hack_squat') score -= 5;
-    if (ex.id === 'leg_press') score -= 3;
-    if (ex.id === 'goblet') score -= 2;
-    if (ex.id === 'rdl_db') score -= 5;
-    if (ex.id === 'rdl_bb') score -= 3;
-    if (ex.id === 'hip_thrust') score -= 2;
-    if (ex.id === 'bb_squat') score += 4;
-    if (ex.id === 'front_squat') score += 3;
-    if (ex.id === 'deadlift') score += 5;
   }
 
   if (p.focus === 'glutes') {
@@ -275,7 +251,7 @@ function exercisePreferenceScore(ex, p) {
     if (['bb_squat', 'front_squat', 'deadlift', 'weighted_dips'].includes(ex.id)) score += 5;
   }
   if (p.focus === 'tone') {
-    if (JOINT_FRIENDLY.has(ex.id)) score -= 1.5;
+    if (STABLE_VARIANTS.has(ex.id)) score -= 1.5;
     if (AXIAL_HEAVY.has(ex.id) || ex.id === 'weighted_dips') score += 2.5;
   }
   if (p.focus === 'posture') {
@@ -326,12 +302,10 @@ function allowedEquipmentFor(p = {}) {
 function isExerciseAllowed(ex, p) {
   if (!ex || !p) return false;
   const allowed = allowedEquipmentFor(p);
-  const limits = Array.isArray(p.limits) ? p.limits : [];
   const basic = (candidate) => allowed.has(candidate.eq)
     && candidate.d <= maxDifficultyFor(p)
     && meetsExperienceGate(candidate, p)
-    && !isAvoidedExercise(candidate, p)
-    && !(candidate.av || []).some((area) => limits.includes(area));
+    && !isAvoidedExercise(candidate, p);
   if (!basic(ex)) return false;
   if (p.balance === 'support' && (ex.st || 0) >= 2) {
     const supported = EX.some((candidate) => candidate.p === ex.p && basic(candidate) && (candidate.st || 0) <= 1);
@@ -343,7 +317,9 @@ function isExerciseAllowed(ex, p) {
 // manualOnly-вправи доступні у списку ручних замін, але не потрапляють
 // до автоматично згенерованої програми (наприклад, рідкісний треп-гриф).
 function isAutoSelectable(ex, p) {
-  return !!ex && !ex.manualOnly && isExerciseAllowed(ex, p);
+  const limits = Array.isArray(p && p.limits) ? p.limits : [];
+  const sensitive = !!ex && (ex.av || []).some((area) => limits.includes(area));
+  return !!ex && !ex.manualOnly && !sensitive && isExerciseAllowed(ex, p);
 }
 
 const slotSpec = (slot) => typeof slot === 'string' ? slot : slot.spec;
@@ -458,7 +434,7 @@ function buildPlan(pRaw) {
     if (p.limits.length) {
       const before = pool.length;
       pool = pool.filter((e) => !(e.av || []).some((a) => p.limits.includes(a)));
-      if (pool.length < before) why.push('обмеження (' + p.limits.map((l) => LIMIT_LABEL[l]).join(', ') + '): рухи з ризиком для цієї зони виключені');
+      if (pool.length < before) why.push('чутлива зона (' + p.limits.map((l) => LIMIT_LABEL[l]).join(', ') + '): автоматично обрано інший варіант');
     }
     if (p.avoid.length) {
       const before = pool.length;
@@ -485,8 +461,7 @@ function buildPlan(pRaw) {
     pool = fresh.length ? fresh : fd;
     const preferred = preferExercises(pool, p);
     if (preferred.length < pool.length) {
-      const ageReason = p.age >= 35 ? 'вік ' + p.age + ' + ' : '';
-      why.push(ageReason + 'акцент програми, стаж, ціль і стабільність: обрано варіант із кращим співвідношенням стимулу до технічної втоми');
+      why.push('акцент програми, стаж, ціль і контроль руху: обрано відповідний варіант');
       pool = preferred;
     }
     const fw = pool.filter((e) => !usedWeek.has(e.id)); if (fw.length) pool = fw;
@@ -699,12 +674,12 @@ function tempoFor(item, week, heavy) {
 }
 function restFor(item, plan, heavy) {
   if (heavy) return '3 хв';
-  if (item.ex.t === 'iso') return (SEX[plan.profile.sex] || SEX.x).restIso;
+  if (item.ex.t === 'iso') return '60–90 с';
   return plan.profile.goal === 'strength' ? '3 хв' : '2–3 хв';
 }
 function targetFor(level, muscle, teen, sex) {
   const [lo, hi] = VOLUME_TARGET[level];
-  const k = (MUSCLE_CAP[muscle] || 1) * (teen ? 0.8 : 1) * ((SEX[sex] || SEX.x).cap[muscle] || 1);
+  const k = (MUSCLE_CAP[muscle] || 1) * (teen ? 0.8 : 1);
   return [Math.round(lo * k), Math.round(hi * k)];
 }
 function weeklyVolume(plan, week) {
@@ -825,16 +800,16 @@ const WARMUP_GUIDES = {
 const warmupGuide = (id) => ({ id, ...WARMUP_GUIDES[id] });
 
 function warmup(plan, day) {
-  const f = plan.flags, out = [];
+  const out = [];
   const pats = new Set((day ? day.items : []).map((it) => it.ex.p));
   const has = (...xs) => xs.some((x) => pats.has(x));
   const upper = has('h_push', 'v_push', 'v_pull', 'h_pull');
   const legs = has('squat', 'lunge', 'quad_iso');
   const hinge = has('hinge', 'ham_iso');
 
-  if (f.longWarm) out.push(warmupGuide('general'));
-  if (f.cuff && upper) out.push(warmupGuide('externalRotation'));
-  if (f.older || plan.profile.balance !== 'steady') out.push(warmupGuide('supportedBalance'));
+  out.push(warmupGuide('general'));
+  if (plan.profile.limits.includes('shoulder') && upper) out.push(warmupGuide('externalRotation'));
+  if (plan.profile.balance !== 'steady') out.push(warmupGuide('supportedBalance'));
   if (['glutes', 'tone'].includes(plan.profile.focus) && (legs || hinge)) out.push(warmupGuide('bandAbduction'));
   if (plan.profile.limits.includes('knee') && legs) out.push(warmupGuide('legExtension'));
   if (plan.profile.limits.includes('lowback') && (hinge || legs)) out.push(warmupGuide('deadBug'));
@@ -855,7 +830,7 @@ function warmup(plan, day) {
 const DEFAULT_PROFILE = {
   age: 39, sex: 'm', level: 'adv', days: 3, mode: 'auto', programStyle: 'auto',
   customDays: [{ groups: ['back', 'biceps'] }, { groups: ['chest', 'delts', 'triceps'] }, { groups: ['quads', 'hams', 'glutes', 'calves'] }],
-  place: 'gym', homeEquipment: [], bar: true, goal: 'hyper', focus: 'upper', priority: ['back', 'chest'], avoid: [], limits: [], balance: 'steady',
+  place: 'gym', homeEquipment: [], bar: true, goal: 'hyper', focus: 'balanced', priority: [], avoid: [], limits: [], balance: 'steady',
   weekdays: [0, 2, 4], timeCap: null, fatigue: false, seed: 0,
 };
 const DEFAULT_WEEKDAYS = {
@@ -944,7 +919,7 @@ function isProfileBuildable(profile) {
   return safe.mode === 'auto' || (safe.customDays.length === safe.days && safe.customDays.every((day) => day.groups.length > 0));
 }
 export {
-  JOINT_FRIENDLY, AXIAL_HEAVY, REQUIRES_FOUNDATION, ADVANCED_ONLY, BALANCE, FOCUS, CUSTOM_FOCUS, AVOID, DAY_SLOTS, SPLITS, FULLBODY_SPLITS, BODY_PART_SPLITS, splitForProfile, SEX,
+  STABLE_VARIANTS, AXIAL_HEAVY, REQUIRES_FOUNDATION, ADVANCED_ONLY, BALANCE, FOCUS, CUSTOM_FOCUS, AVOID, DAY_SLOTS, SPLITS, FULLBODY_SPLITS, BODY_PART_SPLITS, splitForProfile, SEX,
   GROUP_SLOTS, GROUP_WEIGHT, GROUP_CAP, customSlots, dayLabel,
   PRIORITY_PATTERN, FALLBACK, MACRO, LOADS, HEAVY_LOAD, round2, loadFor, isLoadable,
   REPS, VOLUME_TARGET, MUSCLE_CAP, PROGRESSION, ageFlags, stableBias,

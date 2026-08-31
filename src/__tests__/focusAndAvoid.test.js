@@ -72,16 +72,17 @@ describe('акцент програми та особисті виключенн
       .forEach((term) => expect(html).toContain(term));
   });
 
-  it('жіночий стартовий профіль видимий, а старі збережені дані мігрують без втрат', () => {
-    expect(SEX.f.focus).toBe('glutes');
-    expect(FOCUS[SEX.f.focus].priority).toEqual(['glutes', 'hams']);
+  it('стать не задає тренувальний акцент, а старі збережені дані мігрують без втрат', () => {
+    expect(SEX.f.focus).toBe('balanced');
+    expect(SEX.m.focus).toBe('balanced');
+    expect(FOCUS[SEX.f.focus].priority).toEqual([]);
 
     const oldFemale = sanitizeProfile({ sex: 'f', priority: ['glutes', 'hams'], days: 3 });
     expect(oldFemale.focus).toBe('glutes');
     expect(oldFemale.avoid).toEqual([]);
 
     const corrupted = sanitizeProfile({ focus: 'вигаданий', avoid: ['barbell', 'вигадане', 'dips', 'barbell'] });
-    expect(corrupted.focus).toBe('upper');
+    expect(corrupted.focus).toBe('balanced');
     expect(corrupted.avoid).toEqual(['barbell', 'dips']);
   });
 
