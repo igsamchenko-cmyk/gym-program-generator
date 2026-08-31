@@ -74,7 +74,7 @@ describe('каталог додаткових вправ', () => {
     expect(EX.find((exercise) => exercise.id === 'leg_press').media.src)
       .toBe('exercise-media/leg-press-v2.webp');
     expect(EX.find((exercise) => exercise.id === 'leg_press_calf').media.src)
-      .toBe('exercise-media/leg-press-calf-v3.webp');
+      .toBe('exercise-media/leg-press-calf-v4.webp');
     expect(EX.find((exercise) => exercise.id === 'rope_overhead').media.src)
       .toBe('exercise-media/rope-overhead-v2.webp');
     expect(EX.find((exercise) => exercise.id === 'deadlift').media.src)
