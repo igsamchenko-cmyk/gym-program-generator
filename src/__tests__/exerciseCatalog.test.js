@@ -1,4 +1,4 @@
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { EX } from '../data/exercises.js';
@@ -27,6 +27,34 @@ function profile(overrides = {}) {
   };
 }
 
+function webpDimensions(buffer) {
+  const chunk = buffer.toString('ascii', 12, 16);
+
+  if (chunk === 'VP8X') {
+    return {
+      width: 1 + buffer.readUIntLE(24, 3),
+      height: 1 + buffer.readUIntLE(27, 3),
+    };
+  }
+
+  if (chunk === 'VP8 ') {
+    return {
+      width: buffer.readUInt16LE(26) & 0x3fff,
+      height: buffer.readUInt16LE(28) & 0x3fff,
+    };
+  }
+
+  if (chunk === 'VP8L') {
+    const bits = buffer.readUInt32LE(21);
+    return {
+      width: 1 + (bits & 0x3fff),
+      height: 1 + ((bits >>> 14) & 0x3fff),
+    };
+  }
+
+  throw new Error(`Непідтримуваний WebP chunk: ${chunk}`);
+}
+
 describe('каталог додаткових вправ', () => {
   it('містить 119 унікальних вправ і всі 21 новий запис', () => {
     expect(EX).toHaveLength(119);
@@ -41,6 +69,17 @@ describe('каталог додаткових вправ', () => {
       const file = join(process.cwd(), 'public', relative);
       expect(existsSync(file), `${exercise.id}: ${file}`).toBe(true);
       expect(statSync(file).size, exercise.id).toBeGreaterThan(0);
+    });
+  });
+
+  it('усі локальні схеми є справжніми WebP розміром 1200×800', () => {
+    EX.forEach((exercise) => {
+      const relative = exercise.media.src.replace(/^\//, '');
+      const file = join(process.cwd(), 'public', relative);
+      const buffer = readFileSync(file);
+      expect(buffer.toString('ascii', 0, 4), exercise.id).toBe('RIFF');
+      expect(buffer.toString('ascii', 8, 12), exercise.id).toBe('WEBP');
+      expect(webpDimensions(buffer), exercise.id).toEqual({ width: 1200, height: 800 });
     });
   });
 
