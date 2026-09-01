@@ -141,8 +141,8 @@ const MACRO = {
   beg: [
     { tag: 'Техніка', mult: 1.0, rb: 3, ri: 3, tempo: '3-0-2', note: 'Заходиш у програму. Єдине завдання тижня — вивчити рухи. Ваги свідомо легкі.' },
     { tag: 'Тільки вага', mult: 1.0, rb: 3, ri: 3, tempo: '3-0-2', note: 'Схема та сама, змінюється ЛИШЕ вага: +2.5 кг там, де три підходи пройшли чисто.' },
-    { tag: 'Тільки обсяг', mult: 1.15, rb: 3, ri: 2, tempo: '3-0-2', note: 'Ваги фіксуєш, додається підхід. Дві змінні одночасно не рухаємо — інакше не зрозумієш, що дало ефект.' },
-    { tag: 'Тільки вага', mult: 1.15, rb: 2, ri: 2, tempo: '3-0-2', note: 'Обсяг стоїть, вага росте. Останні повторення важкі, але техніка не сиплеться.' },
+    { tag: 'Тільки обсяг', mult: 1.15, rb: 3, ri: 3, tempo: '3-0-2', note: 'Вага й RIR фіксовані, додається лише підхід. Так зрозуміло, на що саме реагує тіло.' },
+    { tag: 'Тільки вага', mult: 1.15, rb: 3, ri: 3, tempo: '3-0-2', note: 'Обсяг і RIR стоять, змінюється лише робоча вага. Техніка та контроль повторів мають лишатися такими самими.' },
     { tag: 'Делоад', mult: 0.5, rb: 4, ri: 4, tempo: '3-1-3', deload: true, note: 'Половина підходів, ваги −40 %. Це запланована частина циклу, а не пропуск.' },
   ],
   int: [
@@ -302,24 +302,21 @@ function allowedEquipmentFor(p = {}) {
 function isExerciseAllowed(ex, p) {
   if (!ex || !p) return false;
   const allowed = allowedEquipmentFor(p);
+  const limits = Array.isArray(p.limits) ? p.limits : [];
   const basic = (candidate) => allowed.has(candidate.eq)
     && candidate.d <= maxDifficultyFor(p)
     && meetsExperienceGate(candidate, p)
-    && !isAvoidedExercise(candidate, p);
+    && !isAvoidedExercise(candidate, p)
+    && !(candidate.av || []).some((area) => limits.includes(area));
   if (!basic(ex)) return false;
-  if (p.balance === 'support' && (ex.st || 0) >= 2) {
-    const supported = EX.some((candidate) => candidate.p === ex.p && basic(candidate) && (candidate.st || 0) <= 1);
-    if (supported) return false;
-  }
+  if (p.balance === 'support' && (ex.st || 0) >= 2) return false;
   return true;
 }
 
 // manualOnly-вправи доступні у списку ручних замін, але не потрапляють
 // до автоматично згенерованої програми (наприклад, рідкісний треп-гриф).
 function isAutoSelectable(ex, p) {
-  const limits = Array.isArray(p && p.limits) ? p.limits : [];
-  const sensitive = !!ex && (ex.av || []).some((area) => limits.includes(area));
-  return !!ex && !ex.manualOnly && !sensitive && isExerciseAllowed(ex, p);
+  return !!ex && !ex.manualOnly && isExerciseAllowed(ex, p);
 }
 
 const slotSpec = (slot) => typeof slot === 'string' ? slot : slot.spec;
@@ -449,7 +446,9 @@ function buildPlan(pRaw) {
         : 'стаж: вправи, що потребують попередньої відносної сили або складного контролю, відкладено до наступного рівня');
     }
     if (p.balance === 'support') {
-      cut((e) => (e.st || 0) <= 1, 'потрібна опора: рух із високою вимогою до рівноваги замінено стабільним');
+      const before = pool.length;
+      pool = pool.filter((e) => (e.st || 0) <= 1);
+      if (pool.length < before) why.push('потрібна опора: рух із високою вимогою до рівноваги замінено стабільним');
     }
     if (!pool.length) { const fb = FALLBACK[pattern]; return fb && depth < 2 ? pick(fb + (wantType ? '!' + wantType : ''), usedDay, depth + 1) : { ex: null, why: [] }; }
     if (wantRg) cut((e) => e.rg === wantRg, 'слот націлений на підспецифікацію «' + REGION[wantRg] + '»');
@@ -642,6 +641,9 @@ function buildPlan(pRaw) {
       d.missingGroups = missingRequestedGroups(d);
     });
   }
+  normalizePeakVolume(plan);
+  plan.days.forEach((day) => { day.underfilled = day.items.length < 4 && !day.trimmed; });
+  plan.underfilledDays = plan.days.flatMap((day, index) => day.underfilled ? [index] : []);
   return plan;
 }
 
@@ -694,6 +696,57 @@ function weeklyVolume(plan, week) {
   );
   return { byMuscle, byRegion };
 }
+
+function normalizePeakVolume(plan) {
+  const peak = plan.weeks.reduce((a, b) => (a.mult > b.mult ? a : b));
+  const trimmed = {};
+  let guard = 0;
+
+  while (guard++ < 500) {
+    const volume = weeklyVolume(plan, peak).byMuscle;
+    const over = Object.keys(MUSCLE)
+      .map((muscle) => {
+        const [, hi] = targetFor(plan.profile.level, muscle, plan.flags.teen, plan.profile.sex);
+        return { muscle, value: Math.round(volume[muscle] || 0), hi };
+      })
+      .filter((entry) => entry.value > entry.hi)
+      .sort((a, b) => (b.value - b.hi) - (a.value - a.hi));
+    if (!over.length) break;
+
+    const { muscle } = over[0];
+    const candidates = plan.days.flatMap((day, dayIndex) =>
+      day.items.map((item, itemIndex) => ({ item, dayIndex, itemIndex }))
+    ).filter(({ item }) => item.base > 1 && exerciseCoversGroup(item.ex, muscle))
+      .sort((a, b) => {
+        const directA = a.item.ex.m === muscle ? 0 : 1;
+        const directB = b.item.ex.m === muscle ? 0 : 1;
+        const isoA = a.item.ex.t === 'iso' ? 0 : 1;
+        const isoB = b.item.ex.t === 'iso' ? 0 : 1;
+        const priorityA = plan.profile.priority.includes(a.item.ex.m) ? 1 : 0;
+        const priorityB = plan.profile.priority.includes(b.item.ex.m) ? 1 : 0;
+        return directA - directB || isoA - isoB || priorityA - priorityB
+          || b.dayIndex - a.dayIndex || b.itemIndex - a.itemIndex;
+      });
+
+    if (!candidates.length) break;
+    const chosen = candidates[0].item;
+    chosen.base -= 1;
+    if (!chosen.why.includes('обсяг скориговано, щоб піковий тиждень не перевищував верхню межу')) {
+      chosen.why.push('обсяг скориговано, щоб піковий тиждень не перевищував верхню межу');
+    }
+    trimmed[muscle] = (trimmed[muscle] || 0) + 1;
+  }
+
+  const finalVolume = weeklyVolume(plan, peak).byMuscle;
+  const unresolved = {};
+  Object.keys(MUSCLE).forEach((muscle) => {
+    const [, hi] = targetFor(plan.profile.level, muscle, plan.flags.teen, plan.profile.sex);
+    const value = Math.round(finalVolume[muscle] || 0);
+    if (value > hi) unresolved[muscle] = { value, hi };
+  });
+  plan.volumeTrimmed = trimmed;
+  plan.volumeOverCap = unresolved;
+}
 const restSec = (str) => { const m = str.match(/(\d+)(?:–(\d+))?\s*(хв|с)/); if (!m) return 90; const v = m[2] ? (+m[1] + +m[2]) / 2 : +m[1]; return m[3] === 'хв' ? v * 60 : v; };
 function sessionMinutes(day, week, plan, di) {
   let sec = 0;
@@ -737,7 +790,7 @@ function scheduleWarnings(plan) {
 function frequency(plan) {
   const f = {};
   plan.days.forEach((d) => {
-    const seen = new Set(d.items.map((it) => it.ex.m));
+    const seen = new Set(d.items.flatMap((it) => [it.ex.m, ...(it.ex.s || [])]));
     seen.forEach((m) => { f[m] = (f[m] || 0) + 1; });
   });
   return f;
@@ -779,7 +832,7 @@ const WARMUP_GUIDES = {
   },
   deadBug: {
     text: 'Мертвий жук 2×8 на бік — увімкнути стабілізацію перед осьовими рухами',
-    media: { src: 'exercise-media/dead-bug.webp', alt: 'Мертвий жук: початкова й кінцева позиції' },
+    media: { src: 'exercise-media/dead-bug-v2.webp', alt: 'Мертвий жук: початкова й кінцева позиції' },
     cue: 'Притисни поперек до підлоги й повільно опускай протилежні руку та ногу.',
     err: 'Відривати поперек, поспішати або одночасно опускати руку й ногу з одного боку.',
   },

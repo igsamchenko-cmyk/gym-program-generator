@@ -87,6 +87,14 @@ describe('каталог додаткових вправ', () => {
       .toBe('exercise-media/db-row-v2.webp');
     expect(EX.find((exercise) => exercise.id === 'machine_pullover').media.src)
       .toBe('exercise-media/machine-pullover-v2.webp');
+    expect(EX.find((exercise) => exercise.id === 'dead_bug').media.src)
+      .toBe('exercise-media/dead-bug-v2.webp');
+    expect(EX.find((exercise) => exercise.id === 'band_calf').media.src)
+      .toBe('exercise-media/band-calf-v2.webp');
+    expect(EX.find((exercise) => exercise.id === 'band_straight_arm').media.src)
+      .toBe('exercise-media/band-straight-arm-v2.webp');
+    expect(EX.find((exercise) => exercise.id === 'db_pullover').media.src)
+      .toBe('exercise-media/db-pullover-v2.webp');
   });
 
   it('усі локальні схеми є справжніми WebP розміром 1200×800', () => {
@@ -113,10 +121,10 @@ describe('каталог додаткових вправ', () => {
     }
   });
 
-  it('чутлива зона змінює автоматичний добір, але не оголошує вправу забороненою вручну', () => {
+  it('чутлива зона виключає невідповідну вправу і з автоматичного, і з ручного добору', () => {
     const benchPress = EX.find((exercise) => exercise.id === 'bb_bench');
     const shoulderSensitive = profile({ limits: ['shoulder'] });
-    expect(isExerciseAllowed(benchPress, shoulderSensitive)).toBe(true);
+    expect(isExerciseAllowed(benchPress, shoulderSensitive)).toBe(false);
     expect(isAutoSelectable(benchPress, shoulderSensitive)).toBe(false);
   });
 

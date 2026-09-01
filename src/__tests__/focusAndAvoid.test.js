@@ -89,10 +89,10 @@ describe('акцент програми та особисті виключенн
   it('сідничний профіль реально додає пряме покриття у фулбоді новачка', () => {
     const balanced = buildPlan(profile({ sex: 'f', age: 28, level: 'beg', days: 3, focus: 'balanced', priority: [] }));
     const glutes = buildPlan(profile({ sex: 'f', age: 28, level: 'beg', days: 3, focus: 'glutes', priority: ['glutes', 'hams'] }));
-    const balancedFrequency = frequency(balanced);
     const gluteFrequency = frequency(glutes);
+    const directDays = (plan, muscle) => plan.days.filter((day) => day.items.some((item) => item.ex.m === muscle)).length;
 
-    expect(gluteFrequency.glutes || 0).toBeGreaterThan(balancedFrequency.glutes || 0);
+    expect(directDays(glutes, 'glutes')).toBeGreaterThan(directDays(balanced, 'glutes'));
     expect(gluteFrequency.glutes).toBeGreaterThanOrEqual(2);
     expect(gluteFrequency.hams).toBeGreaterThanOrEqual(2);
   });
