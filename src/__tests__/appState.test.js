@@ -14,6 +14,19 @@ import {
 describe('app state portability', () => {
   it('removes empty and invalid anchor values', () => {
     expect(cleanAnchors({ bench: '80', empty: '', zero: 0, bad: 'x' })).toEqual({ bench: 80 });
+    expect(cleanAnchors({ squat: { weight: '100', reps: '5', rir: '2' } })).toEqual({
+      squat: { weight: 100, reps: 5, rir: 2 },
+    });
+  });
+
+  it('keeps per-set logs, pain, session RPE, readiness and notes', () => {
+    expect(cleanJournal({
+      a: { sets: [{ weight: '80', reps: '8', rir: '2' }, {}], pain: '1', note: 'Чисто' },
+      'session:0:0': { readiness: '4', sessionRpe: '7', note: 'Добрий сон' },
+    })).toEqual({
+      a: { done: false, pain: 1, sets: [{ weight: 80, reps: 8, rir: 2 }], note: 'Чисто' },
+      'session:0:0': { done: false, sessionRpe: 7, readiness: 4, note: 'Добрий сон' },
+    });
   });
 
   it('keeps only usable journal entries', () => {

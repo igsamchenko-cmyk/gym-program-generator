@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildPlan, DEFAULT_PROFILE, frequency, sanitizeProfile, splitForProfile } from '../engine.js';
+import { applySwapsToPlan, buildPlan, DEFAULT_PROFILE, frequency, isHeavy, sanitizeProfile, splitForProfile } from '../engine.js';
 import { EX } from '../data/exercises.js';
 
 function profile(overrides = {}) {
@@ -68,6 +68,21 @@ describe('регресія: setDays синхронізує weekdays/customDays (
   it('weekdays довший за days не ламає buildPlan — рахуються лише перші days елементів там, де потрібно', () => {
     const p = profile({ days: 2, weekdays: [0, 1, 2, 3, 4] }); // штучно "забруднений" стан
     expect(() => buildPlan(p)).not.toThrow();
+  });
+});
+
+describe('регресія: ручна заміна не успадковує чужий тип навантаження', () => {
+  it('не дозволяє замінити базову станову тягу на ізоляційну гіперекстензію', () => {
+    const plan = buildPlan(profile({ level: 'adv', goal: 'hyper', days: 3, place: 'gym' }));
+    const location = plan.days.flatMap((day, di) => day.items.map((item) => ({ item, di })))
+      .find(({ item }) => item.ex.id === 'deadlift');
+    expect(location).toBeTruthy();
+    const hyper = EX.find((exercise) => exercise.id === 'hyperext');
+    const swapped = applySwapsToPlan(plan, { [location.di + ':deadlift']: hyper });
+    expect(swapped.days[location.di].items.some((item) => item.ex.id === 'hyperext')).toBe(false);
+    swapped.weeks.forEach((week) => swapped.days[location.di].items.forEach((item, index) => {
+      if (isHeavy(location.di, index, week, swapped)) expect(item.ex.t).toBe('comp');
+    }));
   });
 });
 

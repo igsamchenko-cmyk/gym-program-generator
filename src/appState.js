@@ -1,4 +1,4 @@
-export const APP_STATE_VERSION = 2;
+export const APP_STATE_VERSION = 3;
 export const SHARE_PREFIX = '#p=';
 
 const isObject = (value) => value && typeof value === 'object' && !Array.isArray(value);
@@ -6,8 +6,18 @@ const isObject = (value) => value && typeof value === 'object' && !Array.isArray
 export function cleanAnchors(value) {
   if (!isObject(value)) return {};
   return Object.fromEntries(Object.entries(value).flatMap(([id, raw]) => {
-    const weight = Number(raw);
-    return Number.isFinite(weight) && weight > 0 ? [[id, weight]] : [];
+    if (typeof raw === 'number' || typeof raw === 'string') {
+      const weight = Number(raw);
+      return Number.isFinite(weight) && weight > 0 ? [[id, weight]] : [];
+    }
+    if (!isObject(raw)) return [];
+    const weight = Number(raw.weight), reps = Number(raw.reps), rir = Number(raw.rir);
+    if (!Number.isFinite(weight) || weight <= 0) return [];
+    return [[id, {
+      weight,
+      reps: Number.isFinite(reps) && reps > 0 ? reps : 8,
+      rir: Number.isFinite(rir) && rir >= 0 ? rir : 2,
+    }]];
   }));
 }
 
@@ -16,11 +26,25 @@ export function cleanJournal(value) {
   return Object.fromEntries(Object.entries(value).flatMap(([key, raw]) => {
     if (!isObject(raw)) return [];
     const entry = { done: !!raw.done };
-    ['weight', 'reps', 'rir'].forEach((field) => {
+    ['weight', 'reps', 'rir', 'pain', 'sessionRpe', 'readiness'].forEach((field) => {
       if (raw[field] == null || raw[field] === '') return;
       const number = Number(raw[field]);
       if (Number.isFinite(number) && number >= 0) entry[field] = number;
     });
+    if (Array.isArray(raw.sets)) {
+      entry.sets = raw.sets.slice(0, 12).map((set) => {
+        if (!isObject(set)) return {};
+        const clean = {};
+        ['weight', 'reps', 'rir'].forEach((field) => {
+          const number = Number(set[field]);
+          if (set[field] !== '' && Number.isFinite(number) && number >= 0) clean[field] = number;
+        });
+        return clean;
+      });
+      while (entry.sets.length && !Object.keys(entry.sets.at(-1)).length) entry.sets.pop();
+      if (!entry.sets.length) delete entry.sets;
+    }
+    if (typeof raw.note === 'string' && raw.note.trim()) entry.note = raw.note.trim().slice(0, 1000);
     if (typeof raw.updatedAt === 'string') entry.updatedAt = raw.updatedAt;
     return entry.done || Object.keys(entry).length > 1 ? [[key, entry]] : [];
   }));

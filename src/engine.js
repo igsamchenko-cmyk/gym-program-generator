@@ -177,14 +177,49 @@ const LOADS = {
   int: [0.87, 1.0, 1.0, 1.0, 1.02, 1.02, 0.6],
   adv: [0.6, 0.875, 1.0, 1.0, 1.0, 1.02, 0.6, 1.0, 1.02, 1.04, 0.6],
 };
-const HEAVY_LOAD = 1.12;
+const HEAVY_LOAD = 1.12; // лише міграція старих числових орієнтирів
 Object.keys(MACRO).forEach((k) => MACRO[k].forEach((w, i) => { w.n = i + 1; w.load = LOADS[k][i]; }));
 
 const round2 = (x) => Math.round(x / 2.5) * 2.5;
-function loadFor(item, week, heavy, anchors) {
-  const a = anchors && anchors[item.ex.id];
-  if (!a) return null;
-  return round2(a * week.load * (heavy ? HEAVY_LOAD : 1));
+const GOAL_CONFIG = {
+  hyper: { setFactor: 1, compRest: '2–3 хв', isoRest: '60–90 с', compPct: 0.72, isoPct: 0.65 },
+  strength: { setFactor: 0.85, compRest: '3–4 хв', isoRest: '90–120 с', compPct: 0.82, isoPct: 0.68 },
+  fatloss: { setFactor: 0.85, compRest: '90–120 с', isoRest: '45–75 с', compPct: 0.65, isoPct: 0.58 },
+  health: { setFactor: 0.75, compRest: '90–120 с', isoRest: '60–90 с', compPct: 0.6, isoPct: 0.55 },
+};
+const GOAL_GUIDANCE = {
+  hyper: 'Пріоритет — достатній тижневий обсяг і якісні повтори. Частота допомагає зручно розподілити цей обсяг, але сама по собі не гарантує кращий ріст.',
+  strength: 'Пріоритет — важчі базові підходи на початку сесії. Вага розраховується від орієнтовного 1ПМ за фактичними вагою, повторами та RIR, без універсальної надбавки.',
+  fatloss: 'Силова частина зберігає м’язи, а коротші паузи роблять сесію щільнішою. Зниження маси визначається насамперед енергетичним балансом; додай посильну аеробну активність.',
+  health: 'Це силова частина загального плану здоров’я. Окремо орієнтуйся на 150–300 хв помірної аеробної активності на тиждень; старшим людям також потрібна регулярна багатокомпонентна робота над балансом.',
+};
+function normalizeAnchor(raw) {
+  if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) return { weight: raw, legacy: true };
+  if (!raw || typeof raw !== 'object') return null;
+  const weight = Number(raw.weight), reps = Number(raw.reps), rir = Number(raw.rir);
+  if (!Number.isFinite(weight) || weight <= 0) return null;
+  return {
+    weight,
+    reps: Number.isFinite(reps) && reps > 0 ? reps : 8,
+    rir: Number.isFinite(rir) && rir >= 0 ? rir : 2,
+    legacy: false,
+  };
+}
+function estimated1RM(raw) {
+  const anchor = normalizeAnchor(raw);
+  if (!anchor || anchor.legacy) return null;
+  return anchor.weight * (1 + (anchor.reps + anchor.rir) / 30);
+}
+function loadFor(item, week, heavy, anchors, plan) {
+  const anchor = normalizeAnchor(anchors && anchors[item.ex.id]);
+  if (!anchor) return null;
+  if (anchor.legacy) return round2(anchor.weight * week.load * (heavy ? HEAVY_LOAD : 1));
+  const goal = plan?.profile?.goal || 'hyper';
+  const config = GOAL_CONFIG[goal] || GOAL_CONFIG.hyper;
+  let pct = item.ex.t === 'comp' ? config.compPct : config.isoPct;
+  if (heavy && goal !== 'strength') pct = Math.max(0.8, pct);
+  if (plan?.profile?.level === 'beg') pct = Math.min(pct, 0.72);
+  return round2(estimated1RM(anchor) * pct * week.load);
 }
 // вправи, для яких має сенс вести робочу вагу
 const isLoadable = (ex) => ['barbell', 'dumbbell', 'machine', 'cable', 'dipstation'].includes(ex.eq);
@@ -261,6 +296,14 @@ function exercisePreferenceScore(ex, p) {
   if (p.focus === 'athletic' && p.level === 'adv' && ex.t === 'comp') score -= 1.5;
 
   if (p.goal === 'strength' && p.level === 'adv' && p.balance === 'steady' && ex.eq === 'barbell' && ex.t === 'comp') score -= 3;
+  if (p.goal === 'health') {
+    if (STABLE_VARIANTS.has(ex.id) || ['machine', 'cable'].includes(ex.eq)) score -= 2;
+    if (AXIAL_HEAVY.has(ex.id) || ex.st >= 2) score += 3;
+  }
+  if (p.goal === 'fatloss') {
+    if (ex.t === 'comp' && ex.st <= 1) score -= 1.5;
+    if (ex.uni) score += 1;
+  }
   return score;
 }
 
@@ -408,6 +451,20 @@ function markHeavy(day) {
   day.heavyA = h[0] ? h[0].i : -1;
   day.heavyB = h[1] ? h[1].i : -1;
   return day;
+}
+
+function applySwapsToPlan(plan, swaps = {}) {
+  if (!plan) return null;
+  const days = plan.days.map((day, dayIndex) => {
+    const items = day.items.map((item) => {
+      const replacement = swaps[dayIndex + ':' + item.ex.id];
+      const valid = replacement && replacement.p === item.ex.p && replacement.t === item.ex.t
+        && isExerciseAllowed(replacement, plan.profile);
+      return valid ? { ...item, ex: replacement } : item;
+    });
+    return markHeavy({ ...day, items });
+  });
+  return { ...plan, days };
 }
 
 function buildPlan(pRaw) {
@@ -592,12 +649,29 @@ function buildPlan(pRaw) {
   });
 
   // Підліткова безпека має діяти на рівні даних тижня, які UI показує напряму.
-  const weeks = fl.teen
+  const baseWeeks = fl.teen
     ? MACRO[p.level].map((week) => ({
         ...week, heavy: undefined, test: undefined,
         rb: Math.max(week.rb, 2), ri: Math.max(week.ri, 2),
       }))
     : MACRO[p.level];
+  const weeks = baseWeeks.map((week) => {
+    if (p.goal === 'hyper') return { ...week };
+    if (week.deload) return { ...week, heavy: undefined, test: undefined, tech: false };
+    if (p.goal === 'strength') return {
+      ...week, heavy: undefined, test: undefined, tech: false,
+      note: 'Силовий тиждень: базові вправи виконуються у рівневому діапазоні повторів, а вага визначається від орієнтовного 1ПМ. Не додавай інтенсивність, якщо техніка або RIR не відповідають плану.',
+    };
+    if (p.goal === 'fatloss') return {
+      ...week, heavy: undefined, test: undefined, tech: false,
+      note: 'Щільний силовий тиждень із помірним обсягом і коротшими паузами. Якість повторів важливіша за максимальний пульс; дефіцит енергії створюється харчуванням і загальною активністю.',
+    };
+    return {
+      ...week, heavy: undefined, test: undefined, tech: false,
+      rb: Math.max(week.rb, 3), ri: Math.max(week.ri, 2),
+      note: 'Керований силовий тиждень для здоров’я: стабільні рухи, запас повторів і помірний обсяг. Аеробна активність та баланс плануються окремо від цієї силової сесії.',
+    };
+  });
   const plan = { profile: p, flags: fl, weeks, days };
 
   // Ліміт часу: зменшуємо обсяг і допоміжні вправи, але зберігаємо хоча б одне покриття кожної обраної групи.
@@ -647,12 +721,17 @@ function buildPlan(pRaw) {
   return plan;
 }
 
-const isHeavy = (di, idx, week, plan) => (week.heavy === 'A' && idx === plan.days[di].heavyA) || (week.heavy === 'B' && idx === plan.days[di].heavyB);
+const isHeavy = (di, idx, week, plan) => {
+  const item = plan.days[di]?.items[idx];
+  if (!item || item.ex.t !== 'comp' || HEAVY_RANK[item.ex.p] === undefined || plan.profile.goal !== 'hyper') return false;
+  return (week.heavy === 'A' && idx === plan.days[di].heavyA) || (week.heavy === 'B' && idx === plan.days[di].heavyB);
+};
 
 function setsFor(item, week, plan, heavy) {
   if (heavy) return 2;
   const m = plan.flags.teen ? 0.8 : 1;
-  let n = Math.max(1, Math.round(item.base * week.mult * m));
+  const goalFactor = (GOAL_CONFIG[plan.profile.goal] || GOAL_CONFIG.hyper).setFactor;
+  let n = Math.max(1, Math.round(item.base * week.mult * m * goalFactor));
   // запобіжник: обсяг зрізається з ізоляції, база не чіпається
   if (plan.profile.fatigue && item.ex.t === 'iso' && !week.deload) n = Math.max(1, n - 1);
   return n;
@@ -663,9 +742,13 @@ function rirFor(item, week, plan) {
   const floor = plan.flags.teen || plan.profile.level === 'beg' ? 2 : 0;
   return Math.max(raw, floor);
 }
-function repsFor(item, goal, week, heavy) {
-  if (heavy) return '3–6';
+function repsFor(item, goal, week, heavy, plan) {
+  if (heavy && goal !== 'strength') return '3–6';
   if (item.ex.u === 'time') return week.deload ? '20–40 с' : '30–60 с';
+  if (goal === 'strength' && item.ex.t === 'comp') {
+    if (plan?.profile?.level === 'beg') return '6–8';
+    if (plan?.profile?.level === 'int') return '4–6';
+  }
   return REPS[goal][item.ex.t];
 }
 function tempoFor(item, week, heavy) {
@@ -675,9 +758,28 @@ function tempoFor(item, week, heavy) {
   return item.ex.tp;
 }
 function restFor(item, plan, heavy) {
-  if (heavy) return '3 хв';
-  if (item.ex.t === 'iso') return '60–90 с';
-  return plan.profile.goal === 'strength' ? '3 хв' : '2–3 хв';
+  if (heavy) return '3–4 хв';
+  const config = GOAL_CONFIG[plan.profile.goal] || GOAL_CONFIG.hyper;
+  return item.ex.t === 'iso' ? config.isoRest : config.compRest;
+}
+function progressionSuggestion(log, item, week, plan, heavy) {
+  if (!log || !Array.isArray(log.sets) || !log.sets.length) return '';
+  if (Number(log.pain) >= 4) return 'Не підвищуй навантаження: зафіксовано біль 4/10 або вище. Перевір техніку, амплітуду й доцільність вправи.';
+  const range = repsFor(item, plan.profile.goal, week, heavy, plan);
+  const numbers = range.match(/\d+/g)?.map(Number) || [];
+  if (item.ex.u === 'time' || numbers.length < 2) return '';
+  const [low, high] = numbers;
+  const complete = log.sets.length >= setsFor(item, week, plan, heavy)
+    && log.sets.every((set) => Number.isFinite(Number(set.reps)) && Number.isFinite(Number(set.rir)));
+  if (!complete) return 'Заповни повтори й RIR кожного підходу — після цього з’явиться рекомендація прогресії.';
+  const plannedRir = rirFor(item, week, plan);
+  if (log.sets.every((set) => Number(set.reps) >= high && Number(set.rir) >= plannedRir)) {
+    return 'Усі підходи досягли верхньої межі з потрібним запасом: наступного разу додай найменший доступний крок ваги.';
+  }
+  if (log.sets.some((set) => Number(set.reps) < low || Number(set.rir) < plannedRir)) {
+    return 'Залиши або трохи зменш вагу, доки всі підходи не ввійдуть у діапазон із запланованим RIR.';
+  }
+  return 'Залиши цю вагу й спробуй додати повтори в межах діапазону.';
 }
 function targetFor(level, muscle, teen, sex) {
   const [lo, hi] = VOLUME_TARGET[level];
@@ -753,14 +855,14 @@ function sessionMinutes(day, week, plan, di) {
   day.items.forEach((it, i) => {
     const h = isHeavy(di, i, week, plan);
     const sets = setsFor(it, week, plan, h);
-    const reps = it.ex.u === 'time' ? 1 : parseInt(repsFor(it, plan.profile.goal, week, h), 10) + 2;
+    const reps = it.ex.u === 'time' ? 1 : parseInt(repsFor(it, plan.profile.goal, week, h, plan), 10) + 2;
     const tempo = (tempoFor(it, week, h).match(/\d+/g) || ['2', '0', '2']).reduce((a, b) => a + +b, 0) || 4;
     const work = it.ex.u === 'time' ? 45 : reps * tempo;
     const rest = restSec(restFor(it, plan, h));
     if (it.ex.uni) sec += sets * (work + rest) * 2;
     else sec += sets * (work + rest);
   });
-  return Math.round((sec + 420) / 60); // +7 хв розминки
+  return Math.round(sec / 60 + warmupMinutes(plan, day));
 }
 
 /* Перевірка календаря: чи вистачає годин між сесіями, що вантажать ту саму групу */
@@ -775,8 +877,8 @@ function scheduleWarnings(plan) {
       const back = 7 - gap;
       const hours = Math.min(gap, back) * 24;
       if (hours >= 48) continue;
-      const a = new Set(plan.days[i].items.map((it) => it.ex.m));
-      const shared = plan.days[j].items.map((it) => it.ex.m).filter((m) => a.has(m) && SLOW_RECOVERY[m]);
+      const a = new Set(plan.days[i].items.flatMap((it) => [it.ex.m, ...(it.ex.s || [])]));
+      const shared = plan.days[j].items.flatMap((it) => [it.ex.m, ...(it.ex.s || [])]).filter((m) => a.has(m) && SLOW_RECOVERY[m]);
       const uniq = [...new Set(shared)];
       if (uniq.length) {
         out.push(WEEKDAYS[wd[i]] + ' → ' + WEEKDAYS[wd[j]] + ' — лише ' + hours + ' год між сесіями, а спільно навантажені: ' +
@@ -880,6 +982,15 @@ function warmup(plan, day) {
   return out;
 }
 
+function warmupMinutes(plan, day) {
+  return warmup(plan, day).reduce((minutes, item) => {
+    if (item.id === 'general') return minutes + 5;
+    if (item.id === 'rampSets') return minutes + 5;
+    if (item.id === 'supportedBalance') return minutes + 2;
+    return minutes + 1.5;
+  }, 0);
+}
+
 const DEFAULT_PROFILE = {
   age: 39, sex: 'm', level: 'adv', days: 3, mode: 'auto', programStyle: 'auto',
   customDays: [{ groups: ['back', 'biceps'] }, { groups: ['chest', 'delts', 'triceps'] }, { groups: ['quads', 'hams', 'glutes', 'calves'] }],
@@ -974,11 +1085,11 @@ function isProfileBuildable(profile) {
 export {
   STABLE_VARIANTS, AXIAL_HEAVY, REQUIRES_FOUNDATION, ADVANCED_ONLY, BALANCE, FOCUS, CUSTOM_FOCUS, AVOID, DAY_SLOTS, SPLITS, FULLBODY_SPLITS, BODY_PART_SPLITS, splitForProfile, SEX,
   GROUP_SLOTS, GROUP_WEIGHT, GROUP_CAP, customSlots, dayLabel,
-  PRIORITY_PATTERN, FALLBACK, MACRO, LOADS, HEAVY_LOAD, round2, loadFor, isLoadable,
+  PRIORITY_PATTERN, FALLBACK, MACRO, LOADS, HEAVY_LOAD, GOAL_CONFIG, GOAL_GUIDANCE, normalizeAnchor, estimated1RM, round2, loadFor, isLoadable,
   REPS, VOLUME_TARGET, MUSCLE_CAP, PROGRESSION, ageFlags, stableBias,
   focusForPriority, isAvoidedExercise, exercisePreferenceScore, preferExercises, maxDifficultyFor, meetsExperienceGate, HOME_EQUIPMENT, allowedEquipmentFor, isExerciseAllowed, isAutoSelectable,
-  slotCount, baseSets, LAST_IN_DAY, orderScore, HEAVY_RANK, markHeavy, buildPlan,
-  isHeavy, setsFor, rirFor, repsFor, tempoFor, restFor, targetFor, weeklyVolume,
-  restSec, sessionMinutes, scheduleWarnings, frequency, techMarks, WARMUP_GUIDES, warmup,
+  slotCount, baseSets, LAST_IN_DAY, orderScore, HEAVY_RANK, markHeavy, applySwapsToPlan, buildPlan,
+  isHeavy, setsFor, rirFor, repsFor, tempoFor, restFor, progressionSuggestion, targetFor, weeklyVolume,
+  restSec, sessionMinutes, scheduleWarnings, frequency, techMarks, WARMUP_GUIDES, warmup, warmupMinutes,
   DEFAULT_PROFILE, sanitizeProfile, isProfileBuildable,
 };
