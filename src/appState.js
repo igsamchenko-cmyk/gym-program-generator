@@ -1,6 +1,7 @@
 import { sanitizeHistory } from './journalAnalytics.ts';
+import { sanitizeClientProfiles, sanitizeCoachEdits } from './coachTools.ts';
 
-export const APP_STATE_VERSION = 4;
+export const APP_STATE_VERSION = 5;
 export const SHARE_PREFIX = '#p=';
 
 const isObject = (value) => value && typeof value === 'object' && !Array.isArray(value);
@@ -28,7 +29,7 @@ export function cleanJournal(value) {
   return Object.fromEntries(Object.entries(value).flatMap(([key, raw]) => {
     if (!isObject(raw)) return [];
     const entry = { done: !!raw.done };
-    ['weight', 'reps', 'rir', 'pain', 'sessionRpe', 'readiness', 'moderateMinutes', 'vigorousMinutes', 'balanceSessions', 'mobilitySessions'].forEach((field) => {
+    ['weight', 'reps', 'rir', 'pain', 'sessionRpe', 'readiness', 'moderateMinutes', 'vigorousMinutes', 'balanceSessions', 'mobilitySessions', 'aerobicSession0', 'aerobicSession1', 'aerobicSession2', 'aerobicSession3', 'aerobicSession4'].forEach((field) => {
       if (raw[field] == null || raw[field] === '') return;
       const number = Number(raw[field]);
       if (Number.isFinite(number) && number >= 0) entry[field] = number;
@@ -96,21 +97,34 @@ export function decodeSharePayload(encoded) {
   return value;
 }
 
-export function makeSharePayload({ profile, anchors, swaps }) {
+export function makeSharePayload({ profile, anchors, swaps, coachEdits }) {
   return {
     version: APP_STATE_VERSION,
     profile,
     anchors: cleanAnchors(anchors),
     swaps: serializeSwaps(swaps),
+    coachEdits: sanitizeCoachEdits(coachEdits),
     built: true,
   };
 }
 
-export function makeBackupPayload({ profile, anchors, swaps, journal, history, built }) {
+export function cleanRevisions(value) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(-100).flatMap((raw) => {
+    if (!isObject(raw) || typeof raw.summary !== 'string') return [];
+    const at = typeof raw.at === 'string' && !Number.isNaN(Date.parse(raw.at)) ? raw.at : new Date(0).toISOString();
+    return [{ at, summary: raw.summary.trim().slice(0, 240) }].filter((item) => item.summary);
+  });
+}
+export function makeBackupPayload({ profile, anchors, swaps, coachEdits, journal, history, revisions, clientName, clients, autoAdjust, built }) {
   return {
-    ...makeSharePayload({ profile, anchors, swaps }),
+    ...makeSharePayload({ profile, anchors, swaps, coachEdits }),
     journal: cleanJournal(journal),
     history: sanitizeHistory(history),
+    revisions: cleanRevisions(revisions),
+    clientName: typeof clientName === 'string' ? clientName.trim().slice(0, 120) : '',
+    clients: sanitizeClientProfiles(clients),
+    autoAdjust: autoAdjust !== false,
     built: !!built,
     exportedAt: new Date().toISOString(),
   };

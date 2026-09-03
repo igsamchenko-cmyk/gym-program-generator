@@ -4,6 +4,8 @@ import HealthPlanPanel from './components/HealthPlanPanel.jsx';
 import ProgressDashboard from './components/ProgressDashboard.jsx';
 import { healthWeekKey } from './healthPlan.ts';
 import { sanitizeHistory, snapshotVolume } from './journalAnalytics.ts';
+import { applyCoachEdits, prescriptionKey, sanitizeClientProfiles, sanitizeCoachEdits } from './coachTools.ts';
+import { trainingAdaptation } from './trainingAdaptation.ts';
 import { CSS } from './styles.js';
 import { downloadJson, storage } from './persistence.js';
 import {
@@ -17,7 +19,7 @@ import {
   DEFAULT_PROFILE, sanitizeProfile,
 } from './engine.js';
 import {
-  APP_STATE_VERSION, SHARE_PREFIX, cleanAnchors, cleanJournal, decodeSharePayload,
+  APP_STATE_VERSION, SHARE_PREFIX, cleanAnchors, cleanJournal, cleanRevisions, decodeSharePayload,
   encodeSharePayload, hydrateSwaps, journalKey, makeBackupPayload, makeSharePayload,
   serializeSwaps,
 } from './appState.js';
@@ -451,10 +453,11 @@ function Wizard({ p, set, onBuild }) {
   );
 }
 
-function ExRow({ item, idx, week, plan, heavy, tech, onSwap, anchors, onAnchor, log, onLog }) {
+function ExRow({ item, idx, week, plan, heavy, tech, onSwap, onCoachEdit, onRemoveCustom, anchors, onAnchor, log, onLog }) {
   const [open, setOpen] = useState(false);
   const [swap, setSwap] = useState(false);
   const [why, setWhy] = useState(false);
+  const [edit, setEdit] = useState(false);
   const p = plan.profile;
   const sets = setsFor(item, week, plan, heavy);
   const alts = EX.filter((e) => e.p === item.ex.p && e.t === item.ex.t && e.id !== item.ex.id && isExerciseAllowed(e, p));
@@ -525,7 +528,20 @@ function ExRow({ item, idx, week, plan, heavy, tech, onSwap, anchors, onAnchor, 
         {progression && <div className="tk-hint" style={{ marginTop: 7 }}><b>Наступний крок:</b> {progression}</div>}
         <button className="tk-mini" onClick={() => setOpen(!open)}>{open ? 'Згорнути техніку' : 'Техніка'}</button>
         {alts.length > 0 && <button className="tk-mini" onClick={() => setSwap(!swap)}>Замінити</button>}
+        <button className="tk-mini" onClick={() => setEdit(!edit)}>{edit ? 'Закрити редактор' : 'Редагувати призначення'}</button>
+        {item.ex.id.startsWith('custom-') && <button className="tk-mini tk-danger" onClick={onRemoveCustom}>Видалити власну вправу</button>}
         {item.why && item.why.length > 0 && <button className="tk-mini" onClick={() => setWhy(!why)}>{why ? 'Згорнути' : 'Чому саме ця вправа'}</button>}
+        {edit && (
+          <div className="tk-coach-editor">
+            <label>Підходи<input type="number" min="1" max="12" placeholder={String(sets)} value={item.coach?.sets ?? ''} onChange={(e) => onCoachEdit('sets', e.target.value)} /></label>
+            <label>Повтори<input type="text" maxLength="12" placeholder={repsFor(item, p.goal, week, heavy, plan)} value={item.coach?.reps ?? ''} onChange={(e) => onCoachEdit('reps', e.target.value)} /></label>
+            <label>RIR<input type="number" min="0" max="10" placeholder={String(rirFor(item, week, plan))} value={item.coach?.rir ?? ''} onChange={(e) => onCoachEdit('rir', e.target.value)} /></label>
+            <label>Темп<input type="text" maxLength="12" placeholder={tempo} value={item.coach?.tempo ?? ''} onChange={(e) => onCoachEdit('tempo', e.target.value)} /></label>
+            <label>Пауза<input type="text" maxLength="40" placeholder={restFor(item, plan, heavy)} value={item.coach?.rest ?? ''} onChange={(e) => onCoachEdit('rest', e.target.value)} /></label>
+            {isLoadable(item.ex) && <label>Планова вага, кг<input type="number" min="0" max="1000" step="0.5" value={item.coach?.load ?? ''} onChange={(e) => onCoachEdit('load', e.target.value)} /></label>}
+            <button type="button" className="tk-mini" onClick={() => onCoachEdit('__reset', '')}>Скинути ручні правки</button>
+          </div>
+        )}
         {why && (
           <div className="tk-why">
             <ul>{item.why.map((r, i) => <li key={i}>{r}</li>)}</ul>
@@ -587,10 +603,72 @@ function VolumePanel({ plan, week }) {
       {Object.keys(plan.volumeTrimmed || {}).length > 0 && (
         <p className="tk-hint">Генератор автоматично зменшив зайві підходи на піковому тижні, щоб жодна група не перевищувала свою верхню межу.</p>
       )}
+      {Object.keys(plan.volumeAdded || {}).length > 0 && (
+        <p className="tk-hint">Генератор додав підходи до нижніх орієнтирів там, де це не порушувало стелю обсягу або вибраний ліміт часу.</p>
+      )}
+      {Object.keys(plan.volumeBelowFloor || {}).length > 0 && (
+        <p className="tk-hint" style={{ color: 'var(--hot)' }}>
+          Нижній орієнтир не досягнуто для: {Object.entries(plan.volumeBelowFloor).map(([muscle, value]) => MUSCLE[muscle] + ' ' + value.value + '/' + value.lo).join(', ')}.
+          Причина — доступні вправи, розклад або ліміт часу; це позначено явно, а не приховано.
+        </p>
+      )}
     </div>
   );
 }
 
+function CoachWorkspacePanel({
+  days, clientName, onClientName, revisions, onSaveRevision,
+  autoAdjust, onAutoAdjust, adaptation, onAddCustom, clients, onSaveClient, onLoadClient, onDeleteClient,
+}) {
+  const [draft, setDraft] = useState({ day: 0, name: '', muscle: 'back', type: 'comp', sets: 3, reps: '8–12', rir: 2, tempo: '2-0-2', rest: '90 с' });
+  const [revisionNote, setRevisionNote] = useState('');
+  const change = (field, value) => setDraft((current) => ({ ...current, [field]: value }));
+  return (
+    <details className="tk-card tk-coach-workspace">
+      <summary><b>Робоче місце тренера</b><span>клієнт, власні вправи, ревізії та автоадаптація</span></summary>
+      <div className="tk-coach-body">
+        <label className="tk-wide-label">Ім’я або код клієнта
+          <input type="text" maxLength="120" value={clientName} onChange={(e) => onClientName(e.target.value)} placeholder="Наприклад: Клієнт А" />
+        </label>
+        <div className="tk-client-actions">
+          <button type="button" className="tk-mini" disabled={!clientName.trim()} onClick={onSaveClient}>Зберегти профіль клієнта</button>
+          {clients.map((client) => (
+            <span className="tk-client" key={client.id}>
+              <button type="button" className="tk-mini" onClick={() => onLoadClient(client.id)}>{client.name}</button>
+              <button type="button" className="tk-mini tk-danger" aria-label={'Видалити профіль ' + client.name} onClick={() => onDeleteClient(client.id)}>×</button>
+            </span>
+          ))}
+        </div>
+        <label className="tk-check">
+          <input type="checkbox" checked={autoAdjust} onChange={(e) => onAutoAdjust(e.target.checked)} />
+          <span><b>Автоматично коригувати наступну сесію за журналом.</b> Низька готовність, session-RPE 9–10 або біль ≥4/10 зменшують підходи й планову вагу.</span>
+        </label>
+        <div className={'tk-adaptation ' + adaptation.level}><b>Поточне рішення:</b> {adaptation.message}</div>
+
+        <h3 className="tk-subhead">Додати власну вправу</h3>
+        <div className="tk-coach-editor">
+          <label>День<select value={draft.day} onChange={(e) => change('day', Number(e.target.value))}>{days.map((day, index) => <option value={index} key={index}>{index + 1}. {day.name}</option>)}</select></label>
+          <label>Назва<input type="text" maxLength="120" value={draft.name} onChange={(e) => change('name', e.target.value)} /></label>
+          <label>Основна група<select value={draft.muscle} onChange={(e) => change('muscle', e.target.value)}>{Object.entries(MUSCLE).map(([key, name]) => <option value={key} key={key}>{name}</option>)}</select></label>
+          <label>Тип<select value={draft.type} onChange={(e) => change('type', e.target.value)}><option value="comp">базова</option><option value="iso">ізоляція</option></select></label>
+          <label>Підходи<input type="number" min="1" max="12" value={draft.sets} onChange={(e) => change('sets', e.target.value)} /></label>
+          <label>Повтори<input type="text" maxLength="12" value={draft.reps} onChange={(e) => change('reps', e.target.value)} /></label>
+          <label>RIR<input type="number" min="0" max="10" value={draft.rir} onChange={(e) => change('rir', e.target.value)} /></label>
+          <button type="button" className="tk-mini" disabled={!draft.name.trim()} onClick={() => { onAddCustom(draft); change('name', ''); }}>Додати до програми</button>
+        </div>
+
+        <h3 className="tk-subhead">Історія змін програми</h3>
+        <div className="tk-revision-add">
+          <input type="text" maxLength="240" value={revisionNote} onChange={(e) => setRevisionNote(e.target.value)} placeholder="Що і чому змінено" />
+          <button type="button" className="tk-mini" onClick={() => { onSaveRevision(revisionNote); setRevisionNote(''); }}>Зберегти ревізію</button>
+        </div>
+        {revisions.length ? (
+          <ul className="tk-revisions">{revisions.slice(-6).reverse().map((revision, index) => <li key={revision.at + index}><b>{new Date(revision.at).toLocaleDateString('uk-UA')}</b> {revision.summary}</li>)}</ul>
+        ) : <p className="tk-hint">Ревізій ще немає. Згенерована або вручну зафіксована зміна з’явиться тут.</p>}
+      </div>
+    </details>
+  );
+}
 class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { error: null }; }
   static getDerivedStateFromError(error) { return { error }; }
@@ -621,6 +699,12 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
   const [anchors, setAnchors] = useState({});
   const [journal, setJournal] = useState({});
   const [sessionHistory, setSessionHistory] = useState([]);
+  const [coachEdits, setCoachEdits] = useState({ prescriptions: {}, customExercises: [] });
+  const [programRevisions, setProgramRevisions] = useState([]);
+  const [clientName, setClientName] = useState('');
+  const [clients, setClients] = useState([]);
+  const [autoAdjust, setAutoAdjust] = useState(true);
+  const [screeningRequired, setScreeningRequired] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [plan, setPlan] = useState(null);
   const [wk, setWk] = useState(0);
@@ -630,13 +714,14 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
   const importRef = useRef(null);
+  const initialLoadRef = useRef(false);
   const set = (patch) => setProfile((s) => ({ ...s, ...patch }));
   const showToast = (message, type = 'ok') => {
     setToast({ message, type });
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 3600);
   };
-  const applyPortableState = (raw, includeJournal = true) => {
+  const applyPortableState = (raw, includeJournal = true, requireScreening = false) => {
     if (!raw || typeof raw !== 'object' || !raw.profile) throw new Error('Файл не містить профілю програми');
     const safe = sanitizeProfile(raw.profile);
     setProfile(safe);
@@ -644,7 +729,13 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
     setSwaps(hydrateSwaps(raw.swaps, EX));
     setJournal(includeJournal ? cleanJournal(raw.journal) : {});
     setSessionHistory(includeJournal ? sanitizeHistory(raw.history) : []);
-    setPlan(raw.built === false ? null : buildPlan(safe));
+    setCoachEdits(sanitizeCoachEdits(raw.coachEdits));
+    setProgramRevisions(includeJournal ? cleanRevisions(raw.revisions) : []);
+    setClientName(includeJournal && typeof raw.clientName === 'string' ? raw.clientName.slice(0, 120) : '');
+    setClients(includeJournal ? sanitizeClientProfiles(raw.clients) : []);
+    setAutoAdjust(raw.autoAdjust !== false);
+    setScreeningRequired(requireScreening && raw.built !== false);
+    setPlan(requireScreening || raw.built === false ? null : buildPlan(safe));
     setWk(0);
     setDay(0);
     setBuildErr(null);
@@ -653,6 +744,11 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
     try {
       const prof = p || profile;
       setPlan(buildPlan(prof));
+      setScreeningRequired(false);
+      setProgramRevisions((current) => [...current, {
+        at: new Date().toISOString(),
+        summary: screeningRequired ? 'Імпортований план допущено після нового скринінгу' : 'Створено нову версію програми',
+      }].slice(-100));
       setWk(0); setDay(0); setSwaps({}); setBuildErr(null);
     } catch (e) { setBuildErr(e.message || String(e)); }
   };
@@ -671,13 +767,15 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
 
   // збереження між сесіями
   useEffect(() => {
+    if (initialLoadRef.current) return;
+    initialLoadRef.current = true;
     (async () => {
       try {
         if (location.hash.startsWith(SHARE_PREFIX)) {
           const shared = decodeSharePayload(location.hash.slice(SHARE_PREFIX.length));
-          applyPortableState(shared, false);
+          applyPortableState(shared, false, true);
           history.replaceState(null, '', location.pathname + location.search);
-          showToast('Програму з посилання відкрито');
+          showToast('Посилання отримано — заверши власний скринінг перед відкриттям плану');
           setLoaded(true);
           return;
         }
@@ -709,11 +807,16 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
           swaps: serializeSwaps(swaps),
           journal: cleanJournal(journal),
           history: sanitizeHistory(sessionHistory),
+          coachEdits: sanitizeCoachEdits(coachEdits),
+          revisions: cleanRevisions(programRevisions),
+          clientName,
+          clients: sanitizeClientProfiles(clients),
+          autoAdjust,
           built: !!plan,
         }));
       } catch (e) {}
     })();
-  }, [profile, anchors, swaps, journal, sessionHistory, plan, loaded]);
+  }, [profile, anchors, swaps, journal, sessionHistory, coachEdits, programRevisions, clientName, clients, autoAdjust, plan, loaded]);
   const reset = async () => {
     if ((Object.keys(journal).length || sessionHistory.length) && !window.confirm('Скинути профіль, поточний журнал та всю історію? Перед цим можна зберегти резервну копію.')) return;
     try { await storage.delete(STATE_KEY); } catch (e) {}
@@ -721,6 +824,11 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
     setSwaps({});
     setJournal({});
     setSessionHistory([]);
+    setCoachEdits({ prescriptions: {}, customExercises: [] });
+    setProgramRevisions([]);
+    setClientName('');
+    setClients([]);
+    setScreeningRequired(false);
     setPlan(null);
   };
   const updateAnchor = (id, field, raw) => {
@@ -739,6 +847,76 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
       else next[id] = { weight: anchor.weight, reps: anchor.reps || 8, rir: anchor.rir ?? 2 };
       return next;
     });
+  };
+  const updateCoachPrescription = (dayIndex, exerciseId, field, raw) => {
+    setCoachEdits((current) => {
+      const key = prescriptionKey(dayIndex, exerciseId);
+      const prescriptions = { ...current.prescriptions };
+      if (field === '__reset') delete prescriptions[key];
+      else {
+        const edit = { ...(prescriptions[key] || {}) };
+        if (raw === '') delete edit[field];
+        else if (['sets', 'rir', 'load'].includes(field)) {
+          const value = Number(raw);
+          if (Number.isFinite(value) && value >= 0) edit[field] = value;
+        } else edit[field] = String(raw).slice(0, 40);
+        if (Object.keys(edit).length) prescriptions[key] = edit;
+        else delete prescriptions[key];
+      }
+      return sanitizeCoachEdits({ ...current, prescriptions });
+    });
+  };
+  const addCustomExercise = (draft) => {
+    const id = 'custom-' + Date.now().toString(36);
+    setCoachEdits((current) => sanitizeCoachEdits({
+      ...current,
+      customExercises: [...current.customExercises, { ...draft, id }],
+    }));
+    setProgramRevisions((current) => [...current, { at: new Date().toISOString(), summary: 'Додано власну вправу: ' + draft.name }].slice(-100));
+  };
+  const removeCustomExercise = (exerciseId) => {
+    setCoachEdits((current) => sanitizeCoachEdits({
+      prescriptions: Object.fromEntries(Object.entries(current.prescriptions).filter(([key]) => !key.endsWith(':' + exerciseId))),
+      customExercises: current.customExercises.filter((exercise) => exercise.id !== exerciseId),
+    }));
+  };
+  const saveClientProfile = () => {
+    const name = clientName.trim();
+    if (!name) return;
+    const state = makeBackupPayload({
+      profile, anchors, swaps, coachEdits, journal, history: sessionHistory,
+      revisions: programRevisions, clientName: name, autoAdjust, built: !!plan,
+    });
+    setClients((current) => {
+      const existing = current.find((client) => client.name.toLocaleLowerCase('uk-UA') === name.toLocaleLowerCase('uk-UA'));
+      const saved = { id: existing?.id || 'client-' + Date.now().toString(36), name, savedAt: new Date().toISOString(), state };
+      return sanitizeClientProfiles([...current.filter((client) => client.id !== saved.id), saved]);
+    });
+    showToast('Профіль клієнта збережено');
+  };
+  const loadClientProfile = (id) => {
+    const client = clients.find((item) => item.id === id);
+    if (!client) return;
+    applyPortableState(client.state, true, false);
+    setClients(clients);
+    setClientName(client.name);
+    showToast('Профіль клієнта відкрито');
+  };
+  const deleteClientProfile = (id) => {
+    const client = clients.find((item) => item.id === id);
+    if (!client || !window.confirm('Видалити локальний профіль клієнта «' + client.name + '»?')) return;
+    setClients((current) => current.filter((item) => item.id !== id));
+    showToast('Профіль клієнта видалено');
+  };
+  const saveRevision = (summary) => {
+    const clean = String(summary || 'Ручне коригування призначень').trim().slice(0, 240);
+    setProgramRevisions((current) => [...current, { at: new Date().toISOString(), summary: clean }].slice(-100));
+    showToast('Ревізію програми збережено');
+  };
+  const deleteSession = (id) => {
+    if (!window.confirm('Видалити цей завершений запис? Дію неможливо скасувати без резервної копії.')) return;
+    setSessionHistory((current) => current.filter((session) => session.id !== id));
+    showToast('Помилковий запис видалено');
   };
   const updateLog = (key, field, raw) => {
     setJournal((current) => {
@@ -764,6 +942,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
         || entry.pain != null || entry.sessionRpe != null || entry.readiness != null
         || entry.moderateMinutes != null || entry.vigorousMinutes != null
         || entry.balanceSessions != null || entry.mobilitySessions != null
+        || Object.keys(entry).some((key) => key.startsWith('aerobicSession'))
         || (entry.sets && entry.sets.length) || entry.note;
       const next = { ...current };
       if (!hasData) delete next[key];
@@ -773,7 +952,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
   };
   const shareProgram = async () => {
     try {
-      const payload = makeSharePayload({ profile, anchors, swaps });
+      const payload = makeSharePayload({ profile, anchors, swaps, coachEdits });
       const url = location.href.split('#')[0] + SHARE_PREFIX + encodeSharePayload(payload);
       if (navigator.share) await navigator.share({ title: 'Моя програма тренувань', text: 'Відкрий програму тренувань', url });
       else await navigator.clipboard.writeText(url);
@@ -785,7 +964,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
   const exportBackup = () => {
     try {
       const stamp = new Date().toISOString().slice(0, 10);
-      downloadJson(`gym-program-backup-${stamp}.json`, makeBackupPayload({ profile, anchors, swaps, journal, history: sessionHistory, built: !!plan }));
+      downloadJson(`gym-program-backup-${stamp}.json`, makeBackupPayload({ profile, anchors, swaps, coachEdits, journal, history: sessionHistory, revisions: programRevisions, clientName, clients, autoAdjust, built: !!plan }));
       showToast('Резервну копію збережено');
     } catch (e) { showToast('Не вдалося створити резервну копію', 'bad'); }
   };
@@ -793,8 +972,8 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
     const file = event.target.files?.[0];
     if (!file) return;
     try {
-      applyPortableState(JSON.parse(await file.text()), true);
-      showToast('Програму та журнал відновлено');
+      applyPortableState(JSON.parse(await file.text()), true, true);
+      showToast('Копію відновлено — заверши новий скринінг перед тренуванням');
     } catch (e) {
       showToast('Не вдалося прочитати резервну копію: ' + (e.message || String(e)), 'bad');
     } finally {
@@ -802,14 +981,13 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
     }
   };
 
+  const adaptation = useMemo(() => trainingAdaptation(sessionHistory), [sessionHistory]);
   const view = useMemo(() => {
     if (!plan) return null;
-    // Ключ overlay — id вправи в ЧИСТОМУ plan (не view), а не позиція.
-    // Так заміна лишається прив'язаною до тієї самої вправи навіть якщо порядок
-    // усередині дня зміниться; а якщо після оновлення коду вправа зникне зі слоту —
-    // заміна просто не застосується, замість тихого накладання на чужу вправу.
-    return applySwapsToPlan(plan, swaps);
-  }, [plan, swaps]);
+    const edited = applyCoachEdits(plan, coachEdits);
+    const swapped = applySwapsToPlan(edited, swaps);
+    return { ...swapped, adaptation: autoAdjust ? adaptation : undefined };
+  }, [plan, swaps, coachEdits, autoAdjust, adaptation]);
 
   const [exporting, setExporting] = useState(false);
   const exportXlsx = async () => {
@@ -881,6 +1059,12 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
               </div>
             </div>
           )}
+          {screeningRequired && (
+            <div className="tk-alert">
+              <b>Імпортований план ще не допущено до виконання</b>
+              Дані програми завантажено, але відповіді іншої людини не замінюють твій скринінг. Заповни анкету нижче; план відкриється лише після проходження перевірки.
+            </div>
+          )}
           <div className="tk-card">
             <div className="tk-eyebrow">Уже маєш резервну копію?</div>
             <p className="tk-p">Імпортуй JSON-файл — профіль, програма та журнал відновляться на цьому пристрої.</p>
@@ -948,11 +1132,22 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
       exercises,
       volume: snapshotVolume(exercises),
       completedSets,
+      plannedSets: view.days[day].items.reduce((sum, item, index) => sum + setsFor(item, week, view, isHeavy(day, index, week, view)), 0),
       ...(sessionLog.readiness == null ? {} : { readiness: sessionLog.readiness }),
       ...(sessionLog.sessionRpe == null ? {} : { sessionRpe: sessionLog.sessionRpe }),
       ...(sessionLog.note ? { note: sessionLog.note } : {}),
     };
     setSessionHistory((current) => sanitizeHistory([...current, snapshot]));
+    setAnchors((current) => {
+      const next = { ...current };
+      exercises.forEach((exercise) => {
+        const best = exercise.sets.filter((set) => Number(set.weight) > 0 && Number(set.reps) > 0)
+          .sort((a, b) => (Number(b.weight) * (1 + (Number(b.reps) + Number(b.rir || 0)) / 30))
+            - (Number(a.weight) * (1 + (Number(a.reps) + Number(a.rir || 0)) / 30)))[0];
+        if (best) next[exercise.exerciseId] = { weight: Number(best.weight), reps: Number(best.reps), rir: Number(best.rir || 0) };
+      });
+      return next;
+    });
     updateLog(sessionKey, 'done', true);
     showToast('Сесію додано до історії');
   };
@@ -965,6 +1160,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
       <div className="tk-main">
         <div className="tk-card">
           <div className="tk-chips">
+            {clientName && <span className="tk-chip">Клієнт: {clientName}</span>}
             <span className="tk-chip">{profile.age} р.</span>
             {profile.sex !== 'x' && <span className="tk-chip">{SEX[profile.sex].label}</span>}
             <span className="tk-chip">{profile.mode === 'custom' ? 'Власна розкладка' : profile.programStyle === 'auto' ? 'Формат: авто' : PROGRAM_STYLE_LABEL[profile.programStyle]}</span>
@@ -1004,10 +1200,16 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
 
         <ReadingGuide />
 
-        <ProgressDashboard history={sessionHistory} />
+        <CoachWorkspacePanel days={view.days} clientName={clientName} onClientName={setClientName}
+          revisions={programRevisions} onSaveRevision={saveRevision} autoAdjust={autoAdjust} onAutoAdjust={setAutoAdjust}
+          adaptation={adaptation} onAddCustom={addCustomExercise} clients={clients}
+          onSaveClient={saveClientProfile} onLoadClient={loadClientProfile} onDeleteClient={deleteClientProfile} />
+
+        <ProgressDashboard history={sessionHistory} onDelete={deleteSession}
+          plannedSets={view.days[day].items.reduce((sum, item, index) => sum + setsFor(item, week, view, isHeavy(day, index, week, view)), 0)} />
 
         {profile.goal === 'health' && (
-          <HealthPlanPanel profile={profile} log={journal[healthWeekKey(wk)] || {}} onChange={(field, value) => updateLog(healthWeekKey(wk), field, value)} />
+          <HealthPlanPanel profile={profile} weekIndex={wk} log={journal[healthWeekKey(wk)] || {}} onChange={(field, value) => updateLog(healthWeekKey(wk), field, value)} />
         )}
 
         <div className="tk-card">
@@ -1075,10 +1277,12 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
           {view.days[day].items.map((it, i) => {
             const key = journalKey(wk, day, it.ex.id);
             return (
-              <ExRow key={plan.days[day].items[i].ex.id} item={it} idx={i} week={week} plan={view}
+              <ExRow key={it.ex.id} item={it} idx={i} week={week} plan={view}
                 heavy={isHeavy(day, i, week, view)} tech={marks.has(i)}
                 anchors={anchors} onAnchor={updateAnchor}
                 log={journal[key] || {}} onLog={(field, value) => updateLog(key, field, value)}
+                onCoachEdit={(field, value) => updateCoachPrescription(day, plan.days[day].items[i]?.ex.id || it.ex.id, field, value)}
+                onRemoveCustom={() => removeCustomExercise(it.ex.id)}
                 onSwap={(ex) => setSwaps((s) => ({ ...s, [day + ':' + plan.days[day].items[i].ex.id]: ex }))} />
             );
           })}

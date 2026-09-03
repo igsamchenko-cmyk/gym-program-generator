@@ -164,7 +164,7 @@ const MACRO = {
     { tag: 'Реадаптація', mult: 0.75, rb: 3, ri: 3, tempo: '3-0-2', note: 'Ваги ~85–90 %. Відточуєш техніку рухів, які змінилися відносно минулого блоку.' },
     { tag: 'Базовий обсяг', mult: 1.0, rb: 3, ri: 1, tempo: '3-0-2', note: 'Повні робочі ваги. RIR розділено за SFR: підхід присідів до відмови коштує системної втоми в рази більше за підхід махів, а стимулу додає непропорційно мало.' },
     { tag: 'Обсяг', mult: 1.0, rb: 3, ri: 1, tempo: '3-0-2', tech: true, note: 'Старт інтенсивних технік: 2–3 підходи на ВСЮ сесію, лише ізоляція, ніколи в базових рухах.' },
-    { tag: 'Важкий блок I', mult: 1.0, rb: 3, ri: 1, tempo: '2-1-X', tech: true, heavy: 'A', note: 'Ротація А: перший базовий рух дня йде у 3–6 повторів на 2 підходи. Після 20 років у діапазоні 8–15 це найменш експлуатована зона — механічне напруження, нервова адаптація, ремоделювання сухожиль.' },
+    { tag: 'Важкий блок I', mult: 1.0, rb: 3, ri: 1, tempo: '2-1-X', tech: true, heavy: 'A', note: 'Ротація А: перший базовий рух дня йде у 3–6 повторів на 2 підходи. Важчий діапазон додається лише за достатнього стажу, стабільної техніки та переносимості; це не тест максимуму.' },
     { tag: 'Важкий блок II', mult: 1.0, rb: 2, ri: 1, tempo: '2-1-X', tech: true, heavy: 'A', note: 'Та сама ротація, +2.5 кг там, де RIR дозволяє. Повноцінна розминка перед важким рухом обовʼязкова.' },
     { tag: 'Делоад', mult: 0.55, rb: 4, ri: 4, tempo: '3-1-3', deload: true, note: 'Плановий делоад перед фінальним блоком. Інтенсивні техніки прибрати повністю.' },
     { tag: 'Тільки обсяг', mult: 1.2, rb: 3, ri: 1, tempo: '3-0-2', tech: true, note: 'Змінюється ОДНА змінна: додаються підходи. RIR лишається як на тижні 3 — інакше не зрозумієш, що спрацювало.' },
@@ -672,6 +672,24 @@ function targetFor(level, muscle, teen, _sex) {
   const k = (MUSCLE_CAP[muscle] || 1) * (teen ? 0.8 : 1);
   return [Math.round(lo * k), Math.round(hi * k)];
 }
+function secondarySetCredit(ex, muscle) {
+  if (ex.volumeCredit && Number.isFinite(Number(ex.volumeCredit[muscle]))) return Number(ex.volumeCredit[muscle]);
+  if (['h_push', 'v_push'].includes(ex.p)) {
+    if (muscle === 'triceps') return 0.5;
+    if (muscle === 'delts') return 0.35;
+    if (muscle === 'chest') return 0.3;
+  }
+  if (['h_pull', 'v_pull'].includes(ex.p)) {
+    if (muscle === 'biceps') return 0.5;
+    if (muscle === 'delts') return 0.25;
+  }
+  if (['squat', 'lunge'].includes(ex.p)) return muscle === 'glutes' || muscle === 'quads' ? 0.55 : 0.3;
+  if (ex.p === 'hinge') {
+    if (muscle === 'glutes' || muscle === 'hams') return 0.6;
+    if (muscle === 'back') return 0.25;
+  }
+  return ex.t === 'comp' ? 0.33 : 0.2;
+}
 function weeklyVolume(plan, week) {
   const byMuscle = {}, byRegion = {};
   plan.days.forEach((d, di) =>
@@ -679,7 +697,9 @@ function weeklyVolume(plan, week) {
       const s = setsFor(it, week, plan, isHeavy(di, i, week, plan));
       byMuscle[it.ex.m] = (byMuscle[it.ex.m] || 0) + s;
       byRegion[it.ex.rg] = (byRegion[it.ex.rg] || 0) + s;
-      (it.ex.s || []).forEach((sec) => { byMuscle[sec] = (byMuscle[sec] || 0) + s * 0.5; });
+      (it.ex.s || []).forEach((sec) => {
+        byMuscle[sec] = (byMuscle[sec] || 0) + s * secondarySetCredit(it.ex, sec);
+      });
     })
   );
   return { byMuscle, byRegion };
@@ -725,15 +745,53 @@ function normalizePeakVolume(plan) {
     trimmed[muscle] = (trimmed[muscle] || 0) + 1;
   }
 
+  const added = {};
+  const floorBlocked = new Set();
+  guard = 0;
+  while (guard++ < 200) {
+    const volume = weeklyVolume(plan, peak).byMuscle;
+    const below = Object.keys(MUSCLE).map((muscle) => {
+      const [lo] = targetFor(plan.profile.level, muscle, plan.flags.teen, plan.profile.sex);
+      return { muscle, value: Math.round(volume[muscle] || 0), lo };
+    }).filter((entry) => entry.value < entry.lo && !floorBlocked.has(entry.muscle))
+      .sort((a, b) => (b.lo - b.value) - (a.lo - a.value));
+    if (!below.length) break;
+    const { muscle } = below[0];
+    const candidate = plan.days.flatMap((day, dayIndex) =>
+      day.items.map((item, itemIndex) => ({ item, day, dayIndex, itemIndex }))
+    ).filter(({ item }) => item.ex.m === muscle && item.base < 6)
+      .sort((a, b) => a.item.base - b.item.base || a.dayIndex - b.dayIndex)[0];
+    if (!candidate) { floorBlocked.add(muscle); continue; }
+    candidate.item.base += 1;
+    const candidateVolume = weeklyVolume(plan, peak).byMuscle;
+    const exceeds = Object.keys(MUSCLE).some((key) => {
+      const [, hi] = targetFor(plan.profile.level, key, plan.flags.teen, plan.profile.sex);
+      return Math.round(candidateVolume[key] || 0) > hi;
+    });
+    const exceedsTime = plan.profile.timeCap && sessionMinutes(candidate.day, peak, plan, candidate.dayIndex) > plan.profile.timeCap;
+    if (exceeds || exceedsTime) {
+      candidate.item.base -= 1;
+      candidate.item.volumeFloorBlocked = true;
+      break;
+    }
+    if (!candidate.item.why.includes('обсяг доповнено до нижнього орієнтира без перевищення стелі')) {
+      candidate.item.why.push('обсяг доповнено до нижнього орієнтира без перевищення стелі');
+    }
+    added[muscle] = (added[muscle] || 0) + 1;
+  }
+
   const finalVolume = weeklyVolume(plan, peak).byMuscle;
-  const unresolved = {};
+  const unresolved = {}, belowFloor = {};
   Object.keys(MUSCLE).forEach((muscle) => {
-    const [, hi] = targetFor(plan.profile.level, muscle, plan.flags.teen, plan.profile.sex);
+    const [lo, hi] = targetFor(plan.profile.level, muscle, plan.flags.teen, plan.profile.sex);
     const value = Math.round(finalVolume[muscle] || 0);
     if (value > hi) unresolved[muscle] = { value, hi };
+    if (value < lo) belowFloor[muscle] = { value, lo };
   });
   plan.volumeTrimmed = trimmed;
+  plan.volumeAdded = added;
   plan.volumeOverCap = unresolved;
+  plan.volumeBelowFloor = belowFloor;
 }
 const restSec = (str) => { const m = str.match(/(\d+)(?:–(\d+))?\s*(хв|с)/); if (!m) return 90; const v = m[2] ? (+m[1] + +m[2]) / 2 : +m[1]; return m[3] === 'хв' ? v * 60 : v; };
 function sessionMinutes(day, week, plan, di) {

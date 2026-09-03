@@ -40,6 +40,30 @@ test('зберігає завершену сесію та показує її в
   await expect(page.getByText('Сесію додано до історії')).toBeVisible();
 });
 
+test('спільне посилання не обходить особистий скринінг', async ({ page }) => {
+  const encoded = Buffer.from(JSON.stringify({ version: 5, profile: { age: 31 }, anchors: {}, swaps: {}, built: true })).toString('base64url');
+  await page.goto('./#p=' + encoded);
+  await page.reload();
+  await expect(page.getByText('Імпортований план ще не допущено до виконання')).toBeVisible();
+  await expect(page.getByText('Тренувальний блок · висота стовпчика = обсяг тижня')).toHaveCount(0);
+  await completeScreening(page);
+  await page.getByRole('button', { name: 'Скласти програму' }).click();
+  await expect(page.getByText('Тренувальний блок · висота стовпчика = обсяг тижня')).toBeVisible();
+});
+
+test('тренер може додати власну вправу і редагувати призначення', async ({ page }) => {
+  await completeScreening(page);
+  await page.getByRole('button', { name: 'Скласти програму' }).click();
+  await page.getByText('Робоче місце тренера').click();
+  await page.getByLabel('Ім’я або код клієнта').fill('Клієнт А');
+  await page.getByRole('button', { name: 'Зберегти профіль клієнта' }).click();
+  await expect(page.getByRole('button', { name: 'Клієнт А', exact: true })).toBeVisible();
+  await page.getByLabel('Назва').fill('Контрольна тяга тренера');
+  await page.getByRole('button', { name: 'Додати до програми' }).click();
+  await expect(page.locator('.tk-exname').filter({ hasText: 'Контрольна тяга тренера' })).toBeVisible();
+  await page.getByRole('button', { name: 'Редагувати призначення' }).first().click();
+  await expect(page.getByText('Скинути ручні правки')).toBeVisible();
+});
 async function expectNoSeriousA11yIssues(page) {
   const results = await new AxeBuilder({ page }).analyze();
   const serious = results.violations.filter((violation) => ['critical', 'serious'].includes(violation.impact));

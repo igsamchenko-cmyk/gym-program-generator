@@ -20,6 +20,7 @@ export type SessionSnapshot = {
   exercises: ExerciseSnapshot[];
   volume: number;
   completedSets: number;
+  plannedSets?: number;
 };
 
 const numberOrUndefined = (value: unknown): number | undefined => {
@@ -63,6 +64,7 @@ export function sanitizeHistory(value: unknown): SessionSnapshot[] {
     const volume = snapshotVolume(exercises);
     const readiness = numberOrUndefined(item.readiness);
     const sessionRpe = numberOrUndefined(item.sessionRpe);
+    const plannedSets = numberOrUndefined(item.plannedSets);
     return [{
       id: typeof item.id === 'string' ? item.id.slice(0, 120) : item.completedAt,
       completedAt: item.completedAt,
@@ -73,6 +75,7 @@ export function sanitizeHistory(value: unknown): SessionSnapshot[] {
       exercises,
       volume,
       completedSets: exercises.reduce((sum, exercise) => sum + exercise.sets.filter((set) => set.reps != null).length, 0),
+      ...(plannedSets === undefined ? {} : { plannedSets: Math.round(plannedSets) }),
       ...(readiness === undefined ? {} : { readiness }),
       ...(sessionRpe === undefined ? {} : { sessionRpe }),
       ...(typeof item.note === 'string' && item.note.trim() ? { note: item.note.trim().slice(0, 1000) } : {}),

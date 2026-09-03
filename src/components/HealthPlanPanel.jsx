@@ -1,7 +1,7 @@
 import { healthProgress } from '../healthPlan.ts';
 
-export default function HealthPlanPanel({ profile, log = {}, onChange }) {
-  const progress = healthProgress(profile, log);
+export default function HealthPlanPanel({ profile, weekIndex = 0, log = {}, onChange }) {
+  const progress = healthProgress(profile, log, weekIndex);
   const { targets } = progress;
   const field = (name, label, max = 1000) => (
     <label className="tk-logfield">{label}
@@ -18,16 +18,16 @@ export default function HealthPlanPanel({ profile, log = {}, onChange }) {
 
   return (
     <section className="tk-card tk-card-dense" aria-labelledby="health-plan-title">
-      <div className="tk-eyebrow">Повний план здоров’я · поточний тиждень</div>
+      <div className="tk-eyebrow">Повний план здоров’я · тиждень {weekIndex + 1}</div>
       <h2 className="tk-h" id="health-plan-title">Сила, аеробна активність, баланс і рухливість</h2>
       <p className="tk-p">
-        Силові дні нижче — лише одна частина плану. Записуй додаткову активність за тиждень;
-        хвилина високої інтенсивності рахується приблизно як дві хвилини помірної.
+        Силові дні нижче — одна частина плану. Аеробні сесії мають конкретну тривалість та інтенсивність;
+        записуй фактичні хвилини після кожної.
       </p>
       <div className="tk-health-grid">
         <div className="tk-health-item">
           <b>Аеробна активність</b>
-          <span>150–300 хв помірної або 75–150 хв високої інтенсивності, чи їх поєднання. Практичний старт: 30 хв × 5 днів.</span>
+          <span>150–300 хв помірної або 75–150 хв високої інтенсивності на тиждень; план підводить до цієї цілі поступово.</span>
         </div>
         <div className="tk-health-item">
           <b>Силова робота</b>
@@ -39,12 +39,26 @@ export default function HealthPlanPanel({ profile, log = {}, onChange }) {
         </div>
         <div className="tk-health-item">
           <b>Рухливість</b>
-          <span>2 короткі сесії по 10 хв. Це практичне доповнення для комфортного діапазону руху, а не заміна силової чи аеробної роботи.</span>
+          <span>2 короткі сесії по 10 хв. Це доповнення для комфортного діапазону руху, а не заміна силової чи аеробної роботи.</span>
         </div>
       </div>
+      <h3 className="tk-subhead">Аеробний розклад</h3>
+      <div className="tk-aerobic-grid">
+        {progress.sessions.map((session, index) => (
+          <div className="tk-health-item" key={session.id}>
+            <b>Сесія {index + 1} · {session.activity}</b>
+            <span>{session.minutes} хв · помірна інтенсивність. {session.cue}</span>
+            {field(session.id, 'Фактично, хв', 300)}
+          </div>
+        ))}
+      </div>
+      <p className="tk-hint">
+        Критерій переходу: якщо виконав щонайменше 80% плану без погіршення самопочуття, переходь до наступного тижня.
+        Якщо ні — повтори поточну тривалість. Високоінтенсивні інтервали не додаються автоматично.
+      </p>
       <div className="tk-log tk-health-log">
         {field('moderateMinutes', 'Помірна активність, хв')}
-        {field('vigorousMinutes', 'Висока активність, хв')}
+        {field('vigorousMinutes', 'Інша висока активність, хв')}
         {field('balanceSessions', 'Сесії балансу', 14)}
         {field('mobilitySessions', 'Сесії рухливості', 14)}
       </div>
@@ -62,7 +76,7 @@ export default function HealthPlanPanel({ profile, log = {}, onChange }) {
           <progress max="100" value={progress.mobilityPercent}>{progress.mobilityPercent}%</progress>
         </div>
       </div>
-      <p className="tk-hint">Помірна інтенсивність: можеш говорити, але не співати. Висока: можеш сказати лише кілька слів без паузи на вдих.</p>
+      <p className="tk-hint">Висока інтенсивність рахується приблизно ×2. Зупинись при болю у грудях, непритомності, незвичній задишці чи запамороченні.</p>
     </section>
   );
 }
