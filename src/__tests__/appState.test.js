@@ -7,6 +7,7 @@ import {
   encodeSharePayload,
   hydrateSwaps,
   journalKey,
+  makeBackupPayload,
   makeSharePayload,
   serializeSwaps,
 } from '../appState.js';
@@ -23,9 +24,11 @@ describe('app state portability', () => {
     expect(cleanJournal({
       a: { sets: [{ weight: '80', reps: '8', rir: '2' }, {}], pain: '1', note: 'Чисто' },
       'session:0:0': { readiness: '4', sessionRpe: '7', note: 'Добрий сон' },
+      'health:0': { moderateMinutes: '90', vigorousMinutes: '30', balanceSessions: '2', mobilitySessions: '1' },
     })).toEqual({
       a: { done: false, pain: 1, sets: [{ weight: 80, reps: 8, rir: 2 }], note: 'Чисто' },
       'session:0:0': { done: false, sessionRpe: 7, readiness: 4, note: 'Добрий сон' },
+      'health:0': { done: false, moderateMinutes: 90, vigorousMinutes: 30, balanceSessions: 2, mobilitySessions: 1 },
     });
   });
 
@@ -54,6 +57,20 @@ describe('app state portability', () => {
     });
     expect(decodeSharePayload(encodeSharePayload(payload))).toEqual(payload);
   });
+  it('includes sanitized session history in a full backup', () => {
+    const backup = makeBackupPayload({
+      profile: { goal: 'health' }, anchors: {}, swaps: {}, journal: {}, built: true,
+      history: [{
+        id: 'session-1',
+        completedAt: '2026-09-03T10:00:00.000Z',
+        week: 1, day: 1, dayName: 'Фулбоді A', goal: 'health',
+        exercises: [{ exerciseId: 'pushup', name: 'Віджимання', sets: [{ reps: 10 }] }],
+      }],
+    });
+    expect(backup.history).toHaveLength(1);
+    expect(backup.history[0]).toMatchObject({ id: 'session-1', completedSets: 1 });
+  });
+
 
   it('builds stable journal keys', () => {
     expect(journalKey(2, 1, 'bb_bench')).toBe('2:1:bb_bench');

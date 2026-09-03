@@ -3,7 +3,12 @@
    Чиста логіка без React: можна тестувати й використовувати окремо від UI.
    ============================================================ */
 import { EX } from './data/exercises.js';
-import { REGION, REGION_GROUP, MUSCLE, EQUIP_SETS, WEEKDAYS, SLOW_RECOVERY, LIMIT_LABEL } from './data/labels.js';
+import { REGION, MUSCLE, EQUIP_SETS, WEEKDAYS, SLOW_RECOVERY, LIMIT_LABEL } from './data/labels.js';
+import {
+  HEAVY_LOAD, round2, GOAL_CONFIG, GOAL_GUIDANCE, normalizeAnchor, estimated1RM, loadFor, isLoadable, REPS, PROGRESSION,
+  setsFor, rirFor, repsFor, tempoFor, restFor, progressionSuggestion,
+} from './prescription.js';
+
 // Стабільні варіанти з опорою або заданою траєкторією. Це не універсальний
 // список «безпечних для суглобів»: комфорт залежить від людини й дозування.
 const STABLE_VARIANTS = new Set(['seated_lat_raise', 'cable_lat_raise', 'ez_curl', 'db_hammer', 'vgrip_pulldown', 'hammer_row',
@@ -177,67 +182,10 @@ const LOADS = {
   int: [0.87, 1.0, 1.0, 1.0, 1.02, 1.02, 0.6],
   adv: [0.6, 0.875, 1.0, 1.0, 1.0, 1.02, 0.6, 1.0, 1.02, 1.04, 0.6],
 };
-const HEAVY_LOAD = 1.12; // лише міграція старих числових орієнтирів
 Object.keys(MACRO).forEach((k) => MACRO[k].forEach((w, i) => { w.n = i + 1; w.load = LOADS[k][i]; }));
 
-const round2 = (x) => Math.round(x / 2.5) * 2.5;
-const GOAL_CONFIG = {
-  hyper: { setFactor: 1, compRest: '2–3 хв', isoRest: '60–90 с', compPct: 0.72, isoPct: 0.65 },
-  strength: { setFactor: 0.85, compRest: '3–4 хв', isoRest: '90–120 с', compPct: 0.82, isoPct: 0.68 },
-  fatloss: { setFactor: 0.85, compRest: '90–120 с', isoRest: '45–75 с', compPct: 0.65, isoPct: 0.58 },
-  health: { setFactor: 0.75, compRest: '90–120 с', isoRest: '60–90 с', compPct: 0.6, isoPct: 0.55 },
-};
-const GOAL_GUIDANCE = {
-  hyper: 'Пріоритет — достатній тижневий обсяг і якісні повтори. Частота допомагає зручно розподілити цей обсяг, але сама по собі не гарантує кращий ріст.',
-  strength: 'Пріоритет — важчі базові підходи на початку сесії. Вага розраховується від орієнтовного 1ПМ за фактичними вагою, повторами та RIR, без універсальної надбавки.',
-  fatloss: 'Силова частина зберігає м’язи, а коротші паузи роблять сесію щільнішою. Зниження маси визначається насамперед енергетичним балансом; додай посильну аеробну активність.',
-  health: 'Це силова частина загального плану здоров’я. Окремо орієнтуйся на 150–300 хв помірної аеробної активності на тиждень; старшим людям також потрібна регулярна багатокомпонентна робота над балансом.',
-};
-function normalizeAnchor(raw) {
-  if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) return { weight: raw, legacy: true };
-  if (!raw || typeof raw !== 'object') return null;
-  const weight = Number(raw.weight), reps = Number(raw.reps), rir = Number(raw.rir);
-  if (!Number.isFinite(weight) || weight <= 0) return null;
-  return {
-    weight,
-    reps: Number.isFinite(reps) && reps > 0 ? reps : 8,
-    rir: Number.isFinite(rir) && rir >= 0 ? rir : 2,
-    legacy: false,
-  };
-}
-function estimated1RM(raw) {
-  const anchor = normalizeAnchor(raw);
-  if (!anchor || anchor.legacy) return null;
-  return anchor.weight * (1 + (anchor.reps + anchor.rir) / 30);
-}
-function loadFor(item, week, heavy, anchors, plan) {
-  const anchor = normalizeAnchor(anchors && anchors[item.ex.id]);
-  if (!anchor) return null;
-  if (anchor.legacy) return round2(anchor.weight * week.load * (heavy ? HEAVY_LOAD : 1));
-  const goal = plan?.profile?.goal || 'hyper';
-  const config = GOAL_CONFIG[goal] || GOAL_CONFIG.hyper;
-  let pct = item.ex.t === 'comp' ? config.compPct : config.isoPct;
-  if (heavy && goal !== 'strength') pct = Math.max(0.8, pct);
-  if (plan?.profile?.level === 'beg') pct = Math.min(pct, 0.72);
-  return round2(estimated1RM(anchor) * pct * week.load);
-}
-// вправи, для яких має сенс вести робочу вагу
-const isLoadable = (ex) => ['barbell', 'dumbbell', 'machine', 'cable', 'dipstation'].includes(ex.eq);
-
-const REPS = {
-  strength: { comp: '3–6', iso: '8–12' },
-  hyper: { comp: '6–10', iso: '10–15' },
-  fatloss: { comp: '8–12', iso: '12–20' },
-  health: { comp: '8–12', iso: '12–15' },
-};
 const VOLUME_TARGET = { beg: [8, 14], int: [11, 19], adv: [14, 23] };
 const MUSCLE_CAP = { back: 1.45, quads: 1.35, delts: 1.25, glutes: 1.2, chest: 1.05, hams: 1.0, triceps: 1.05, biceps: 0.95, calves: 0.85, core: 0.85 };
-const PROGRESSION = {
-  beg: '+2.5 кг або +1 повтор майже щотижня — на цьому стажі нервова адаптація дає швидкий приріст.',
-  int: '+2.5 кг на вправу за 2–4 тижні. Тижнева прогресія на цьому етапі вже фікція.',
-  adv: '+2.5 кг на вправу за 6–10 тижнів. Це не застій, це реальний темп після 10+ років. Обсяг більше не важіль — прогрес виграється спектром повторів, точністю техніки й керуванням втомою.',
-};
-
 function ageFlags(age) {
   return {
     teen: age < 18,
@@ -377,14 +325,6 @@ function removalPreservesGroups(day, index) {
   const currentMissing = new Set(missingRequestedGroups(day));
   const nextMissing = missingRequestedGroups(day, day.items.filter((_, i) => i !== index));
   return nextMissing.every((group) => currentMissing.has(group));
-}
-
-function replacementPreservesGroups(plan, dayIndex, itemIndex, candidate) {
-  const day = plan && plan.days && plan.days[dayIndex];
-  if (!day) return false;
-  const currentMissing = new Set(missingRequestedGroups(day));
-  const items = day.items.map((item, i) => i === itemIndex ? { ...item, ex: candidate } : item);
-  return missingRequestedGroups(day, items).every((group) => currentMissing.has(group));
 }
 
 function balancedSlots(full, count, dayIndex, seed) {
@@ -669,7 +609,7 @@ function buildPlan(pRaw) {
     return {
       ...week, heavy: undefined, test: undefined, tech: false,
       rb: Math.max(week.rb, 3), ri: Math.max(week.ri, 2),
-      note: 'Керований силовий тиждень для здоров’я: стабільні рухи, запас повторів і помірний обсяг. Аеробна активність та баланс плануються окремо від цієї силової сесії.',
+      note: 'Керований силовий тиждень для здоров’я: стабільні рухи, запас повторів і помірний обсяг. Додаткові аеробні хвилини, баланс і рухливість відстежуються у тижневому модулі над силовою сесією.',
     };
   });
   const plan = { profile: p, flags: fl, weeks, days };
@@ -727,61 +667,7 @@ const isHeavy = (di, idx, week, plan) => {
   return (week.heavy === 'A' && idx === plan.days[di].heavyA) || (week.heavy === 'B' && idx === plan.days[di].heavyB);
 };
 
-function setsFor(item, week, plan, heavy) {
-  if (heavy) return 2;
-  const m = plan.flags.teen ? 0.8 : 1;
-  const goalFactor = (GOAL_CONFIG[plan.profile.goal] || GOAL_CONFIG.hyper).setFactor;
-  let n = Math.max(1, Math.round(item.base * week.mult * m * goalFactor));
-  // запобіжник: обсяг зрізається з ізоляції, база не чіпається
-  if (plan.profile.fatigue && item.ex.t === 'iso' && !week.deload) n = Math.max(1, n - 1);
-  return n;
-}
-function rirFor(item, week, plan) {
-  const raw = item.ex.t === 'comp' ? week.rb : week.ri;
-  if (week.deload) return raw;
-  const floor = plan.flags.teen || plan.profile.level === 'beg' ? 2 : 0;
-  return Math.max(raw, floor);
-}
-function repsFor(item, goal, week, heavy, plan) {
-  if (heavy && goal !== 'strength') return '3–6';
-  if (item.ex.u === 'time') return week.deload ? '20–40 с' : '30–60 с';
-  if (goal === 'strength' && item.ex.t === 'comp') {
-    if (plan?.profile?.level === 'beg') return '6–8';
-    if (plan?.profile?.level === 'int') return '4–6';
-  }
-  return REPS[goal][item.ex.t];
-}
-function tempoFor(item, week, heavy) {
-  if (item.ex.tp === '—') return '—';
-  if (heavy) return '2-1-X';
-  if (week.deload) return '3-1-3';
-  return item.ex.tp;
-}
-function restFor(item, plan, heavy) {
-  if (heavy) return '3–4 хв';
-  const config = GOAL_CONFIG[plan.profile.goal] || GOAL_CONFIG.hyper;
-  return item.ex.t === 'iso' ? config.isoRest : config.compRest;
-}
-function progressionSuggestion(log, item, week, plan, heavy) {
-  if (!log || !Array.isArray(log.sets) || !log.sets.length) return '';
-  if (Number(log.pain) >= 4) return 'Не підвищуй навантаження: зафіксовано біль 4/10 або вище. Перевір техніку, амплітуду й доцільність вправи.';
-  const range = repsFor(item, plan.profile.goal, week, heavy, plan);
-  const numbers = range.match(/\d+/g)?.map(Number) || [];
-  if (item.ex.u === 'time' || numbers.length < 2) return '';
-  const [low, high] = numbers;
-  const complete = log.sets.length >= setsFor(item, week, plan, heavy)
-    && log.sets.every((set) => Number.isFinite(Number(set.reps)) && Number.isFinite(Number(set.rir)));
-  if (!complete) return 'Заповни повтори й RIR кожного підходу — після цього з’явиться рекомендація прогресії.';
-  const plannedRir = rirFor(item, week, plan);
-  if (log.sets.every((set) => Number(set.reps) >= high && Number(set.rir) >= plannedRir)) {
-    return 'Усі підходи досягли верхньої межі з потрібним запасом: наступного разу додай найменший доступний крок ваги.';
-  }
-  if (log.sets.some((set) => Number(set.reps) < low || Number(set.rir) < plannedRir)) {
-    return 'Залиши або трохи зменш вагу, доки всі підходи не ввійдуть у діапазон із запланованим RIR.';
-  }
-  return 'Залиши цю вагу й спробуй додати повтори в межах діапазону.';
-}
-function targetFor(level, muscle, teen, sex) {
+function targetFor(level, muscle, teen, _sex) {
   const [lo, hi] = VOLUME_TARGET[level];
   const k = (MUSCLE_CAP[muscle] || 1) * (teen ? 0.8 : 1);
   return [Math.round(lo * k), Math.round(hi * k)];

@@ -29,6 +29,27 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,webp,jpg,jpeg}"],
+        globIgnores: ["exercise-media/**/*", "assets/exceljs*.js"],
+        runtimeCaching: [
+          {
+            urlPattern: ({ request, url }) => request.destination === "image" && url.pathname.includes("/exercise-media/"),
+            handler: "CacheFirst",
+            options: {
+              cacheName: "exercise-technique-media-v1",
+              expiration: { maxEntries: 36, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            urlPattern: /\/assets\/exceljs[^/]*\.js$/,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "optional-export-v1",
+              expiration: { maxEntries: 2, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
         cleanupOutdatedCaches: true,
         navigateFallback: "index.html",
       },

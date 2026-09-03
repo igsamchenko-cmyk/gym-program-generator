@@ -1,4 +1,6 @@
-export const APP_STATE_VERSION = 3;
+import { sanitizeHistory } from './journalAnalytics.ts';
+
+export const APP_STATE_VERSION = 4;
 export const SHARE_PREFIX = '#p=';
 
 const isObject = (value) => value && typeof value === 'object' && !Array.isArray(value);
@@ -26,7 +28,7 @@ export function cleanJournal(value) {
   return Object.fromEntries(Object.entries(value).flatMap(([key, raw]) => {
     if (!isObject(raw)) return [];
     const entry = { done: !!raw.done };
-    ['weight', 'reps', 'rir', 'pain', 'sessionRpe', 'readiness'].forEach((field) => {
+    ['weight', 'reps', 'rir', 'pain', 'sessionRpe', 'readiness', 'moderateMinutes', 'vigorousMinutes', 'balanceSessions', 'mobilitySessions'].forEach((field) => {
       if (raw[field] == null || raw[field] === '') return;
       const number = Number(raw[field]);
       if (Number.isFinite(number) && number >= 0) entry[field] = number;
@@ -104,10 +106,11 @@ export function makeSharePayload({ profile, anchors, swaps }) {
   };
 }
 
-export function makeBackupPayload({ profile, anchors, swaps, journal, built }) {
+export function makeBackupPayload({ profile, anchors, swaps, journal, history, built }) {
   return {
     ...makeSharePayload({ profile, anchors, swaps }),
     journal: cleanJournal(journal),
+    history: sanitizeHistory(history),
     built: !!built,
     exportedAt: new Date().toISOString(),
   };
