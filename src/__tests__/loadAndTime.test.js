@@ -120,12 +120,21 @@ describe('sessionMinutes — оцінка тривалості з урахува
     expect(scheduleWarnings(plan).join(' ')).toContain('Сідничні');
   });
 
-  it('автоматично обмежує пікові дводенні сесії практичною межею 120 хв', () => {
-    for (const goal of ['hyper', 'strength']) {
-      const plan = buildPlan(profile({ level: 'adv', goal, days: 2, place: 'gym', bar: true }));
+  it('застосовує аварійну межу 120 хв до всіх форматів без вибраної тривалості', () => {
+    for (const goal of ['hyper', 'strength', 'fatloss', 'health']) for (const days of [2, 3, 4, 5, 6]) {
+      const plan = buildPlan(profile({ level: 'adv', goal, days, place: 'gym', bar: true, timeCap: null }));
       const peak = plan.weeks.reduce((a, b) => (a.mult > b.mult ? a : b));
       expect(plan).toMatchObject({ effectiveTimeCap: 120, automaticTimeCap: true });
       plan.days.forEach((day, di) => expect(sessionMinutes(day, peak, plan, di)).toBeLessThanOrEqual(120));
+    }
+  });
+
+  it('суворо виконує навіть короткий обраний ліміт і приймає 120 хв', () => {
+    for (const cap of [45, 60, 75, 90, 120]) {
+      const plan = buildPlan(profile({ level: 'adv', goal: 'hyper', days: 3, place: 'gym', bar: true, timeCap: cap, seed: 8 }));
+      const peak = plan.weeks.reduce((a, b) => (a.mult > b.mult ? a : b));
+      expect(plan).toMatchObject({ effectiveTimeCap: cap, automaticTimeCap: false });
+      plan.days.forEach((day, di) => expect(sessionMinutes(day, peak, plan, di)).toBeLessThanOrEqual(cap));
     }
   });
 

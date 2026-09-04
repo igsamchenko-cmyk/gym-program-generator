@@ -620,8 +620,8 @@ function buildPlan(pRaw) {
       note: 'Керований силовий тиждень для здоров’я: стабільні рухи, запас повторів і помірний обсяг. Додаткові аеробні хвилини, баланс і рухливість відстежуються у тижневому модулі над силовою сесією.',
     };
   });
-  const effectiveTimeCap = p.timeCap || (p.days === 2 ? 120 : null);
-  const plan = { profile: p, flags: fl, weeks, days, effectiveTimeCap, automaticTimeCap: !p.timeCap && p.days === 2 };
+  const effectiveTimeCap = Math.min(p.timeCap || 120, 120);
+  const plan = { profile: p, flags: fl, weeks, days, effectiveTimeCap, automaticTimeCap: !p.timeCap };
 
   // Ліміт часу: зменшуємо обсяг і допоміжні вправи, але зберігаємо хоча б одне покриття кожної обраної групи.
   if (effectiveTimeCap) {
@@ -655,6 +655,25 @@ function buildPlan(pRaw) {
           if (cutAt >= 0) {
             d.items.splice(cutAt, 1); markHeavy(d); trimmed++; continue;
           }
+        }
+        break;
+      }
+
+      // Якщо збереження кожної групи все ще не вкладається у вибраний час,
+      // суворо дотримуємося ліміту й явно фіксуємо програмний компроміс.
+      let strictGuard = 0;
+      while (sessionMinutes(d, peak, plan, di) > effectiveTimeCap && strictGuard++ < 60) {
+        const reducible = [...d.items].reverse().find((it) => it.ex.t === 'iso' && it.base > 1)
+          || [...d.items].reverse().find((it) => !p.priority.includes(it.ex.m) && it.base > 1)
+          || [...d.items].reverse().find((it) => it.base > 1);
+        if (reducible) { reducible.base -= 1; trimmed++; d.timeCompromised = true; continue; }
+        if (d.items.length > 2) {
+          let cutAt = -1;
+          for (let i = d.items.length - 1; i >= 0; i--) {
+            if (!p.priority.includes(d.items[i].ex.m)) { cutAt = i; break; }
+          }
+          if (cutAt < 0) cutAt = d.items.length - 1;
+          d.items.splice(cutAt, 1); markHeavy(d); trimmed++; d.timeCompromised = true; continue;
         }
         break;
       }
@@ -968,7 +987,7 @@ const PROFILE_VALUES = {
   focus: new Set([...Object.keys(FOCUS), 'custom']),
   avoid: new Set(Object.keys(AVOID)),
   balance: new Set(Object.keys(BALANCE)),
-  timeCap: new Set([45, 60, 75, 90]),
+  timeCap: new Set([45, 60, 75, 90, 120]),
 };
 const cloneDefaultProfile = () => ({
   ...DEFAULT_PROFILE,

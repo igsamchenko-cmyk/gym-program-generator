@@ -298,7 +298,8 @@ function Wizard({ p, set, onBuild }) {
   const screenComplete = screen.activity && screen.symptoms && screen.condition && screen.intensity;
   const medicalBlock = screen.symptoms === 'yes' || screen.condition !== 'no';
   const teenReady = p.age >= 18 || screen.supervision;
-  const ready = customReady && screenComplete && !medicalBlock && teenReady;
+  const timeCapReady = [45, 60, 75, 90, 120].includes(p.timeCap);
+  const ready = customReady && screenComplete && !medicalBlock && teenReady && timeCapReady;
   return (
     <div className="tk-card tk-card-dense">
       <div className="tk-eyebrow">Крок 1 — параметри</div>
@@ -386,10 +387,10 @@ function Wizard({ p, set, onBuild }) {
       </div>
 
       <div className="tk-field">
-        <HelpLabel label="Скільки часу на тренування">Ліміт охоплює розминку, робочі підходи й відпочинок. Якщо часу бракує, програма спершу скорочує допоміжний обсяг, зберігаючи основні рухи.</HelpLabel>
-        <OptRow options={[['0', 'Без ліміту'], ['45', '45 хв'], ['60', '60 хв'], ['75', '75 хв'], ['90', '90 хв']]}
-          value={String(p.timeCap || 0)} onChange={(v) => set({ timeCap: Number(v) || null })} />
-        <div className="tk-hint">Якщо сесія не вкладається, конструктор зрізає підходи в ізоляції, потім прибирає ізоляційні вправи. Базові рухи чіпає останніми.</div>
+        <HelpLabel label="Тривалість однієї сесії" note="обов’язково">Ліміт охоплює розминку, робочі підходи й відпочинок. Якщо часу бракує, програма спершу скорочує допоміжний обсяг, зберігаючи основні рухи.</HelpLabel>
+        <OptRow ariaLabel="Тривалість сесії" options={[['45', '45 хв'], ['60', '60 хв'], ['75', '75 хв'], ['90', '90 хв'], ['120', '120 хв · максимум']]}
+          value={p.timeCap == null ? '' : String(p.timeCap)} onChange={(v) => set({ timeCap: Number(v) })} />
+        <div className="tk-hint">Для більшості клієнтів практичний орієнтир — 60–90 хв. 120 хв — аварійна верхня межа, а не рекомендована тривалість. Конструктор спершу зрізає ізоляційні підходи й другорядні вправи; базові рухи чіпає останніми.</div>
       </div>
 
       <div className="tk-field">
@@ -448,7 +449,7 @@ function Wizard({ p, set, onBuild }) {
         </label>
       )}
       <button className="tk-cta" disabled={!ready} onClick={() => onBuild()}>
-        {!customReady ? 'Заповни всі дні розкладки' : !screenComplete ? 'Заверши короткий скринінг' : medicalBlock ? 'Спершу отримай індивідуальну оцінку' : !teenReady ? 'Підтвердь нагляд' : 'Скласти програму'}
+        {!customReady ? 'Заповни всі дні розкладки' : !timeCapReady ? 'Обери тривалість сесії' : !screenComplete ? 'Заверши короткий скринінг' : medicalBlock ? 'Спершу отримай індивідуальну оцінку' : !teenReady ? 'Підтвердь нагляд' : 'Скласти програму'}
       </button>
     </div>
   );
@@ -1343,12 +1344,19 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
           </div>
           <div className="tk-meta">
             ~{mins} хв разом із розминкою (~{roundDisplay(warmupMinutes(view, view.days[day]))} хв) · {view.days[day].items.length} вправ
-            {view.automaticTimeCap ? ' · автоматична практична межа ' + view.effectiveTimeCap + ' хв' : view.days[day].trimmed ? ' · сесію скорочено під обраний ліміт ' + view.effectiveTimeCap + ' хв' : ''}
+            {' · ' + (view.automaticTimeCap ? 'аварійна межа для старого профілю ' : 'обраний ліміт ') + view.effectiveTimeCap + ' хв'}
+            {view.days[day].trimmed ? ' · обсяг скорочено за пріоритетами' : ''}
             {view.days[day].overCap ? ' · у ліміт не вкладається навіть після скорочення — лишились самі базові рухи' : ''}
           </div>
-          {!view.effectiveTimeCap && mins > 100 && (
+          {view.effectiveTimeCap === 120 && mins > 100 && (
             <div className="tk-alert" style={{ marginTop: -4 }}>
-              <b>Довга сесія</b>{mins} хв — це та зона, де якість останніх вправ падає швидше, ніж накопичується стимул. Постав ліміт часу в параметрах або рознеси день на два.
+              <b>Довга сесія</b>{mins} хв. Межа 120 хв є аварійним запобіжником, а не цільовою тривалістю. Для більшості клієнтів доцільніше обрати 60–90 хв і прийняти явно показаний недобір другорядного обсягу.
+            </div>
+          )}
+          {view.days[day].timeCompromised && (
+            <div className="tk-alert" style={{ marginTop: 10 }}>
+              <b>Компроміс заради обраного часу</b>
+              Щоб суворо вкластися у {view.effectiveTimeCap} хв, конструктор після ізоляції скоротив частину базового обсягу або покриття груп. Перевір червоний список недобраного тижневого обсягу нижче; за потреби обери довшу сесію або більше тренувальних днів.
             </div>
           )}
           {view.days[day].underfilled && (

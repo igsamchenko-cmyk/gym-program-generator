@@ -2,7 +2,7 @@ import { sanitizeHistory } from './journalAnalytics.ts';
 import { sanitizeClientProfiles, sanitizeCoachEdits } from './coachTools.ts';
 import { sanitizeProfile } from './engine.js';
 
-export const APP_STATE_VERSION = 7;
+export const APP_STATE_VERSION = 8;
 export const SHARE_PREFIX = '#p=';
 
 const isObject = (value) => value && typeof value === 'object' && !Array.isArray(value);

@@ -46,4 +46,8 @@ describe('sanitizeProfile — захист від застарілого про�
     expect(safe.homeEquipment).toEqual(['band', 'dumbbell']);
     expect(safe.bar).toBe(false);
   });
+  it('приймає 120 хв і відкидає довільні значення ліміту', () => {
+    expect(sanitizeProfile({ timeCap: 120 }).timeCap).toBe(120);
+    expect(sanitizeProfile({ timeCap: 121 }).timeCap).toBeNull();
+  });
 });

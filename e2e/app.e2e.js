@@ -1,17 +1,25 @@
 import { expect, test } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
-async function completeScreening(page) {
+async function completeScreening(page, chooseDuration = true) {
   await page.getByRole('group', { name: 'Регулярна активність' }).getByRole('button', { name: 'Так' }).click();
   await page.getByRole('group', { name: 'Симптоми' }).getByRole('button', { name: 'Ні' }).click();
   await page.getByRole('group', { name: 'Відомі захворювання' }).getByRole('button', { name: 'Ні' }).click();
   await page.getByRole('group', { name: 'Запланована інтенсивність' }).getByRole('button', { name: 'Помірна' }).click();
+  if (chooseDuration) await page.getByRole('group', { name: 'Тривалість сесії' }).getByRole('button', { name: '75 хв', exact: true }).click();
 }
 
 test.beforeEach(async ({ page }) => {
   await page.goto('./');
   await page.evaluate(() => localStorage.clear());
   await page.reload();
+});
+
+test('вимагає обрати тривалість перед генерацією', async ({ page }) => {
+  await completeScreening(page, false);
+  await expect(page.getByRole('button', { name: 'Обери тривалість сесії' })).toBeDisabled();
+  await page.getByRole('group', { name: 'Тривалість сесії' }).getByRole('button', { name: '60 хв', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Скласти програму' })).toBeEnabled();
 });
 
 test('створює програму після завершення скринінгу', async ({ page }) => {
@@ -102,7 +110,7 @@ test('зберігає стан у IndexedDB і відновлює після п
     request.onsuccess = () => {
       const transaction = request.result.transaction('key-value', 'readonly');
       const read = transaction.objectStore('key-value').get('tk-state');
-      read.onsuccess = () => resolve(typeof read.result === 'string' && read.result.includes('"version":7'));
+      read.onsuccess = () => resolve(typeof read.result === 'string' && read.result.includes('"version":8'));
       read.onerror = () => resolve(false);
     };
     request.onerror = () => resolve(false);
