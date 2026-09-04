@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  buildPlan, DEFAULT_PROFILE, estimated1RM, loadFor, repsFor, scheduleWarnings,
+  buildPlan, DEFAULT_PROFILE, e1rmConfidence, estimated1RM, loadFor, loadStepFor, repsFor, roundToStep, scheduleWarnings,
   progressionSuggestion, sessionMinutes, setsFor, warmupMinutes,
 } from '../engine.js';
 import { EX } from '../data/exercises.js';
@@ -56,14 +56,23 @@ describe('loadFor — відсоток від робочої ваги по ти�
     expect(loadFor(item, plan.weeks[0], false, {})).toBeNull();
   });
 
-  it('округлення завжди кратне 2.5 кг', () => {
-    const plan = buildPlan(profile({ level: 'adv', days: 3, place: 'gym', bar: true }));
-    const item = plan.days[0].items.find((it) => ['barbell', 'dumbbell'].includes(it.ex.eq));
-    const anchors = { [item.ex.id]: 83 };
-    plan.weeks.forEach((w) => {
-      const kg = loadFor(item, w, false, anchors);
-      if (kg !== null) expect(kg % 2.5).toBe(0);
-    });
+  it('округлює вагу за кроком конкретної вправи', () => {
+    expect(roundToStep(83.4, 0.5)).toBe(83.5);
+    const week = { rb: 3, ri: 2, load: 1, mult: 1 };
+    const plan = { profile: { goal: 'hyper', level: 'int', fatigue: false }, flags: { teen: false } };
+    const dumbbell = { coach: { load: 23.4, fixedLoad: true }, ex: { id: 'db', t: 'comp', eq: 'dumbbell' } };
+    const machine = { coach: { load: 83, fixedLoad: true }, ex: { id: 'machine', t: 'comp', eq: 'machine' } };
+    const micro = { coach: { load: 83.4, loadStep: 0.5, fixedLoad: true }, ex: { id: 'bar', t: 'comp', eq: 'barbell' } };
+    expect(loadStepFor(dumbbell)).toBe(1);
+    expect(loadFor(dumbbell, week, false, {}, plan)).toBe(23);
+    expect(loadFor(machine, week, false, {}, plan)).toBe(85);
+    expect(loadFor(micro, week, false, {}, plan)).toBe(83.5);
+  });
+
+  it('не використовує високоповторний підхід як e1RM-якір', () => {
+    expect(estimated1RM({ weight: 50, reps: 20, rir: 1 })).toBeNull();
+    expect(e1rmConfidence({ weight: 50, reps: 20, rir: 1 })).toMatchObject({ level: 'excluded', eligible: false });
+    expect(e1rmConfidence({ weight: 80, reps: 12, rir: 2 })).toMatchObject({ level: 'low', eligible: true });
   });
 });
 
@@ -109,6 +118,15 @@ describe('sessionMinutes — оцінка тривалості з урахува
       days: [{ items: [{ ex: squat }] }, { items: [{ ex: glute }] }],
     };
     expect(scheduleWarnings(plan).join(' ')).toContain('Сідничні');
+  });
+
+  it('автоматично обмежує пікові дводенні сесії практичною межею 120 хв', () => {
+    for (const goal of ['hyper', 'strength']) {
+      const plan = buildPlan(profile({ level: 'adv', goal, days: 2, place: 'gym', bar: true }));
+      const peak = plan.weeks.reduce((a, b) => (a.mult > b.mult ? a : b));
+      expect(plan).toMatchObject({ effectiveTimeCap: 120, automaticTimeCap: true });
+      plan.days.forEach((day, di) => expect(sessionMinutes(day, peak, plan, di)).toBeLessThanOrEqual(120));
+    }
   });
 
   it('оцінка часу завжди додатна й скінченна для будь-якого дня плану', () => {

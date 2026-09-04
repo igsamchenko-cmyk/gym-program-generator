@@ -2,7 +2,7 @@ import { sanitizeHistory } from './journalAnalytics.ts';
 import { sanitizeClientProfiles, sanitizeCoachEdits } from './coachTools.ts';
 import { sanitizeProfile } from './engine.js';
 
-export const APP_STATE_VERSION = 6;
+export const APP_STATE_VERSION = 7;
 export const SHARE_PREFIX = '#p=';
 
 const isObject = (value) => value && typeof value === 'object' && !Array.isArray(value);
@@ -161,9 +161,11 @@ export function diffProgramSnapshots(from, to) {
 
 export function cleanPendingAdaptation(value) {
   if (!isObject(value) || !isObject(value.decision)) return null;
-  const week = Number(value.week), day = Number(value.day);
+  const unassigned = value.week == null && value.day == null;
+  const partialTarget = (value.week == null) !== (value.day == null);
+  const week = unassigned ? null : Number(value.week), day = unassigned ? null : Number(value.day);
   const decision = value.decision;
-  if (!Number.isInteger(week) || week < 0 || week > 10 || !Number.isInteger(day) || day < 0 || day > 5) return null;
+  if (partialTarget || (!unassigned && (!Number.isInteger(week) || week < 0 || week > 10 || !Number.isInteger(day) || day < 0 || day > 5))) return null;
   if (!['reduce', 'recover'].includes(decision.level)) return null;
   return {
     week, day,
@@ -175,6 +177,19 @@ export function cleanPendingAdaptation(value) {
       message: typeof decision.message === 'string' ? decision.message.slice(0, 500) : '',
     },
   };
+}
+
+export function assignPendingAdaptation(value, week, day, sessionDone = false) {
+  const current = cleanPendingAdaptation(value);
+  if (!current || current.week != null || sessionDone) return current;
+  const targetWeek = Number(week), targetDay = Number(day);
+  if (!Number.isInteger(targetWeek) || targetWeek < 0 || targetWeek > 10 || !Number.isInteger(targetDay) || targetDay < 0 || targetDay > 5) return current;
+  return { ...current, week: targetWeek, day: targetDay };
+}
+
+export function cancelPendingAdaptation(value, sourceId) {
+  const current = cleanPendingAdaptation(value);
+  return current?.sourceId && current.sourceId === sourceId ? null : current;
 }
 
 export function makeBackupPayload({ profile, anchors, swaps, coachEdits, journal, history, revisions, clientName, clients, autoAdjust, pendingAdaptation, built }) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanPendingAdaptation, cleanRevisions, diffProgramSnapshots, makeProgramSnapshot, makeSharePayload, APP_STATE_VERSION } from '../appState.js';
+import { assignPendingAdaptation, cancelPendingAdaptation, cleanPendingAdaptation, cleanRevisions, diffProgramSnapshots, makeProgramSnapshot, makeSharePayload, APP_STATE_VERSION } from '../appState.js';
 import { applyCoachEdits, exerciseRecords, sanitizeCoachEdits } from '../coachTools.ts';
 import { aerobicSchedule, healthProgress } from '../healthPlan.ts';
 import { attendanceSummary } from '../journalAnalytics.ts';
@@ -21,14 +21,14 @@ describe('professional workflow safeguards', () => {
 
   it('sanitizes and applies prescription edits and custom exercises', () => {
     const edits = sanitizeCoachEdits({
-      prescriptions: { '0:press': { sets: 4, reps: '6-8', rir: 2, tempo: '3-0-1', rest: '2 хв', load: 70 } },
+      prescriptions: { '0:press': { sets: 4, reps: '6-8', rir: 2, tempo: '3-0-1', rest: '2 хв', load: 70, loadStep: 1.25 } },
       customExercises: [{ id: 'custom-one', day: 0, name: 'Моя тяга', muscle: 'back', type: 'comp', sets: 3 }],
     });
     const plan = {
       days: [{ name: 'A', items: [{ base: 3, ex: { id: 'press', n: 'Жим', m: 'chest', p: 'h_push', t: 'comp' } }] }],
     };
     const result = applyCoachEdits(plan, edits);
-    expect(result.days[0].items[0].coach).toMatchObject({ sets: 4, reps: '6–8', load: 70 });
+    expect(result.days[0].items[0].coach).toMatchObject({ sets: 4, reps: '6–8', load: 70, loadStep: 1.25 });
     expect(result.days[0].items[1].ex).toMatchObject({ id: 'custom-one', n: 'Моя тяга', rg: 'back_thick' });
   });
 
@@ -75,6 +75,8 @@ describe('professional workflow safeguards', () => {
     }]);
     expect(records[0]).toMatchObject({ name: 'Тяга', weight: 80, reps: 8 });
     expect(records[0].e1rm).toBeGreaterThan(100);
+    expect(records[0].confidence).toBe('середня');
+    expect(exerciseRecords([{ completedAt: '2026-01-02T00:00:00.000Z', exercises: [{ exerciseId: 'row', name: 'Тяга', sets: [{ weight: 60, reps: 20, rir: 1 }] }] }])).toHaveLength(0);
   });
   it('uses goal-specific volume budgets and keeps health sessions below hypertrophy', () => {
     const plans = Object.fromEntries(['hyper', 'strength', 'fatloss', 'health'].map((goal) => {
@@ -114,6 +116,11 @@ describe('professional workflow safeguards', () => {
 
   it('sanitizes a one-time adaptation target and calculates 28-day attendance', () => {
     expect(cleanPendingAdaptation({ week: 1, day: 2, sourceId: 's1', decision: { level: 'reduce', setFactor: 0.8, loadFactor: 0.9, message: 'ok' } })).toMatchObject({ week: 1, day: 2 });
+    expect(cleanPendingAdaptation({ week: null, day: 2, sourceId: 'bad', decision: { level: 'reduce' } })).toBeNull();
+    const waiting = cleanPendingAdaptation({ week: null, day: null, sourceId: 's2', decision: { level: 'recover', setFactor: 0.65, loadFactor: 0.85, message: 'wait' } });
+    expect(waiting).toMatchObject({ week: null, day: null, sourceId: 's2' });
+    expect(assignPendingAdaptation(waiting, 3, 0)).toMatchObject({ week: 3, day: 0, sourceId: 's2' });
+    expect(cancelPendingAdaptation(waiting, 's2')).toBeNull();
     const now = new Date('2026-09-04T12:00:00.000Z').getTime();
     const history = Array.from({ length: 6 }, (_, index) => ({
       id: 's' + index, completedAt: new Date(now - index * 86400000).toISOString(), week: 1, day: 1, dayName: 'A', goal: 'health', exercises: [],

@@ -5,7 +5,7 @@
 import { EX } from './data/exercises.js';
 import { REGION, MUSCLE, EQUIP_SETS, WEEKDAYS, SLOW_RECOVERY, LIMIT_LABEL } from './data/labels.js';
 import {
-  HEAVY_LOAD, round2, GOAL_CONFIG, GOAL_GUIDANCE, normalizeAnchor, estimated1RM, loadFor, isLoadable, REPS, PROGRESSION,
+  HEAVY_LOAD, DEFAULT_LOAD_STEP, roundToStep, round2, loadStepFor, GOAL_CONFIG, GOAL_GUIDANCE, normalizeAnchor, estimated1RM, e1rmConfidence, loadFor, isLoadable, REPS, PROGRESSION,
   setsFor, rirFor, repsFor, tempoFor, restFor, progressionSuggestion,
 } from './prescription.js';
 
@@ -620,10 +620,11 @@ function buildPlan(pRaw) {
       note: 'Керований силовий тиждень для здоров’я: стабільні рухи, запас повторів і помірний обсяг. Додаткові аеробні хвилини, баланс і рухливість відстежуються у тижневому модулі над силовою сесією.',
     };
   });
-  const plan = { profile: p, flags: fl, weeks, days };
+  const effectiveTimeCap = p.timeCap || (p.days === 2 ? 120 : null);
+  const plan = { profile: p, flags: fl, weeks, days, effectiveTimeCap, automaticTimeCap: !p.timeCap && p.days === 2 };
 
   // Ліміт часу: зменшуємо обсяг і допоміжні вправи, але зберігаємо хоча б одне покриття кожної обраної групи.
-  if (p.timeCap) {
+  if (effectiveTimeCap) {
     const peak = plan.weeks.reduce((a, b) => (a.mult > b.mult ? a : b));
     plan.days.forEach((d, di) => {
       let guard = 0, trimmed = 0;
@@ -633,7 +634,7 @@ function buildPlan(pRaw) {
         }
         return -1;
       };
-      while (sessionMinutes(d, peak, plan, di) > p.timeCap && guard++ < 60) {
+      while (sessionMinutes(d, peak, plan, di) > effectiveTimeCap && guard++ < 60) {
         const isoSet = [...d.items].reverse().find((it) => it.ex.t === 'iso' && it.base > 1);
         if (isoSet) { isoSet.base -= 1; trimmed++; continue; }
 
@@ -659,11 +660,15 @@ function buildPlan(pRaw) {
       }
       d.trimmed = trimmed;
       d.capRequiredMinutes = sessionMinutes(d, peak, plan, di);
-      d.overCap = d.capRequiredMinutes > p.timeCap;
+      d.overCap = d.capRequiredMinutes > effectiveTimeCap;
       d.missingGroups = missingRequestedGroups(d);
     });
   }
   normalizePeakVolume(plan);
+  if (effectiveTimeCap) plan.days.forEach((day, dayIndex) => {
+    day.capRequiredMinutes = sessionMinutes(day, plan.weeks.reduce((a, b) => (a.mult > b.mult ? a : b)), plan, dayIndex);
+    day.overCap = day.capRequiredMinutes > effectiveTimeCap;
+  });
   plan.days.forEach((day) => { day.underfilled = day.items.length < 4 && !day.trimmed; });
   plan.underfilledDays = plan.days.flatMap((day, index) => day.underfilled ? [index] : []);
   return plan;
@@ -777,7 +782,7 @@ function normalizePeakVolume(plan) {
       const [, hi] = targetFor(plan.profile.level, key, plan.flags.teen, plan.profile.sex, plan.profile.goal);
       return Math.round(candidateVolume[key] || 0) > hi;
     });
-    const exceedsTime = plan.profile.timeCap && sessionMinutes(candidate.day, peak, plan, candidate.dayIndex) > plan.profile.timeCap;
+    const exceedsTime = plan.effectiveTimeCap && sessionMinutes(candidate.day, peak, plan, candidate.dayIndex) > plan.effectiveTimeCap;
     if (exceeds || exceedsTime) {
       candidate.item.base -= 1;
       candidate.item.volumeFloorBlocked = true;
@@ -1038,7 +1043,7 @@ function isProfileBuildable(profile) {
 export {
   STABLE_VARIANTS, AXIAL_HEAVY, REQUIRES_FOUNDATION, ADVANCED_ONLY, BALANCE, FOCUS, CUSTOM_FOCUS, AVOID, DAY_SLOTS, SPLITS, FULLBODY_SPLITS, BODY_PART_SPLITS, splitForProfile, SEX,
   GROUP_SLOTS, GROUP_WEIGHT, GROUP_CAP, customSlots, dayLabel,
-  PRIORITY_PATTERN, FALLBACK, MACRO, LOADS, HEAVY_LOAD, GOAL_CONFIG, GOAL_GUIDANCE, normalizeAnchor, estimated1RM, round2, loadFor, isLoadable,
+  PRIORITY_PATTERN, FALLBACK, MACRO, LOADS, HEAVY_LOAD, DEFAULT_LOAD_STEP, roundToStep, loadStepFor, GOAL_CONFIG, GOAL_GUIDANCE, normalizeAnchor, estimated1RM, e1rmConfidence, round2, loadFor, isLoadable,
   REPS, VOLUME_TARGET, MUSCLE_CAP, PROGRESSION, ageFlags, stableBias,
   focusForPriority, isAvoidedExercise, exercisePreferenceScore, preferExercises, maxDifficultyFor, meetsExperienceGate, HOME_EQUIPMENT, allowedEquipmentFor, isExerciseAllowed, isAutoSelectable,
   slotCount, baseSets, LAST_IN_DAY, orderScore, HEAVY_RANK, markHeavy, applySwapsToPlan, buildPlan,

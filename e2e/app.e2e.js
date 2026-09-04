@@ -42,6 +42,26 @@ test('зберігає завершену сесію та показує її в
   await expect(page.getByRole('heading', { name: '1 завершених тренувань' })).toBeVisible();
 });
 
+test('прив’язує корекцію до фактично розпочатої сесії та скасовує з джерелом', async ({ page }) => {
+  await completeScreening(page);
+  await page.getByRole('button', { name: 'Скласти програму' }).click();
+  await page.getByLabel('Готовність до сесії 1–5').fill('2');
+  await page.getByLabel('повт.').first().fill('8');
+  await page.getByRole('button', { name: 'Завершити та зберегти сесію' }).click();
+  await page.getByText('Робоче місце тренера').click();
+  await expect(page.getByText(/Очікує першої фактично розпочатої/)).toBeVisible();
+
+  await page.locator('.tk-day').nth(1).click();
+  await expect(page.getByText('Одноразова корекція цієї сесії')).toHaveCount(0);
+  await page.getByLabel('повт.').first().fill('8');
+  await expect(page.getByText('Одноразова корекція цієї сесії')).toBeVisible();
+
+  await page.locator('.tk-history-list summary').click();
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', { name: 'Видалити помилковий запис' }).click();
+  await expect(page.getByText('Одноразова корекція цієї сесії')).toHaveCount(0);
+});
+
 test('спільне посилання не обходить особистий скринінг', async ({ page }) => {
   const encoded = Buffer.from(JSON.stringify({ version: 5, profile: { age: 31 }, anchors: {}, swaps: {}, built: true })).toString('base64url');
   await page.goto('./#p=' + encoded);
@@ -68,6 +88,7 @@ test('тренер може додати власну вправу і редаг
   await expect(page.getByText('Фіксувати підходи в усі тижні')).toHaveCount(0);
   await page.getByLabel('Базові підходи').first().fill('4');
   await expect(page.getByText('Фіксувати підходи в усі тижні')).toBeVisible();
+  await expect(page.getByLabel('Крок доступної ваги, кг').first()).toBeVisible();
   await expect(page.getByText(/Точна різниця/).first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Відновити цю версію' }).first()).toBeVisible();
 });
@@ -81,7 +102,7 @@ test('зберігає стан у IndexedDB і відновлює після п
     request.onsuccess = () => {
       const transaction = request.result.transaction('key-value', 'readonly');
       const read = transaction.objectStore('key-value').get('tk-state');
-      read.onsuccess = () => resolve(typeof read.result === 'string' && read.result.includes('"version":6'));
+      read.onsuccess = () => resolve(typeof read.result === 'string' && read.result.includes('"version":7'));
       read.onerror = () => resolve(false);
     };
     request.onerror = () => resolve(false);

@@ -1,7 +1,15 @@
 /* Чиста модель дозування: не залежить від генератора вправ або React. */
 const HEAVY_LOAD = 1.12; // лише міграція старих числових орієнтирів
 
-const round2 = (x) => Math.round(x / 2.5) * 2.5;
+const DEFAULT_LOAD_STEP = { barbell: 2.5, dumbbell: 1, machine: 5, cable: 2.5, dipstation: 2.5 };
+const roundToStep = (x, step = 2.5) => {
+  const safeStep = Number(step) > 0 ? Number(step) : 2.5;
+  return Math.round(Math.round(Number(x) / safeStep) * safeStep * 1000) / 1000;
+};
+const round2 = (x) => roundToStep(x, 2.5);
+const loadStepFor = (item) => Number(item?.coach?.loadStep) > 0
+  ? Number(item.coach.loadStep)
+  : (DEFAULT_LOAD_STEP[item?.ex?.eq] || 2.5);
 const GOAL_CONFIG = {
   hyper: { setFactor: 1, compRest: '2–3 хв', isoRest: '60–90 с', compPct: 0.72, isoPct: 0.65 },
   strength: { setFactor: 0.85, compRest: '3–4 хв', isoRest: '90–120 с', compPct: 0.82, isoPct: 0.68 },
@@ -29,16 +37,27 @@ function normalizeAnchor(raw) {
 function estimated1RM(raw) {
   const anchor = normalizeAnchor(raw);
   if (!anchor || anchor.legacy) return null;
+  if (anchor.reps > 15 || anchor.rir > 5) return null;
   return anchor.weight * (1 + (anchor.reps + anchor.rir) / 30);
 }
+function e1rmConfidence(raw) {
+  const anchor = normalizeAnchor(raw);
+  if (!anchor || anchor.legacy) return { level: 'excluded', label: 'недостатньо даних', eligible: false };
+  const hasRir = raw && typeof raw === 'object' && Number.isFinite(Number(raw.rir));
+  if (anchor.reps > 15 || anchor.rir > 5) return { level: 'excluded', label: 'не використовується (>15 повторів або RIR >5)', eligible: false };
+  if (anchor.reps <= 6 && hasRir && anchor.rir <= 2) return { level: 'high', label: 'вища надійність', eligible: true };
+  if (anchor.reps <= 10 && hasRir && anchor.rir <= 4) return { level: 'medium', label: 'середня надійність', eligible: true };
+  return { level: 'low', label: 'низька надійність', eligible: true };
+}
 function loadFor(item, week, heavy, anchors, plan) {
+  const step = loadStepFor(item);
   if (Number(item.coach?.load) > 0) {
     const periodFactor = item.coach.fixedLoad ? 1 : week.load * (heavy ? HEAVY_LOAD : 1);
-    return round2(Number(item.coach.load) * periodFactor * (plan?.adaptation?.loadFactor || 1));
+    return roundToStep(Number(item.coach.load) * periodFactor * (plan?.adaptation?.loadFactor || 1), step);
   }
   const anchor = normalizeAnchor(anchors && anchors[item.ex.id]);
   if (!anchor) return null;
-  if (anchor.legacy) return round2(anchor.weight * week.load * (heavy ? HEAVY_LOAD : 1));
+  if (anchor.legacy) return roundToStep(anchor.weight * week.load * (heavy ? HEAVY_LOAD : 1), step);
   const range = repsFor(item, plan?.profile?.goal || 'hyper', week, heavy, plan);
   const numbers = range.match(/\d+/g)?.map(Number) || [8];
   const targetReps = numbers.length > 1 ? (numbers[0] + numbers[1]) / 2 : numbers[0];
@@ -46,7 +65,8 @@ function loadFor(item, week, heavy, anchors, plan) {
   const repMatchedPct = 1 / (1 + (targetReps + targetRir) / 30);
   const deloadFactor = week.deload ? 0.75 : 1;
   const adaptationFactor = plan?.adaptation?.loadFactor || 1;
-  return round2(estimated1RM(anchor) * repMatchedPct * deloadFactor * adaptationFactor);
+  const e1rm = estimated1RM(anchor);
+  return e1rm == null ? null : roundToStep(e1rm * repMatchedPct * deloadFactor * adaptationFactor, step);
 }
 // вправи, для яких має сенс вести робочу вагу
 const isLoadable = (ex) => ['barbell', 'dumbbell', 'machine', 'cable', 'dipstation'].includes(ex.eq);
@@ -119,7 +139,7 @@ function progressionSuggestion(log, item, week, plan, heavy) {
   if (!complete) return 'Заповни повтори й RIR кожного підходу — після цього з’явиться рекомендація прогресії.';
   const plannedRir = rirFor(item, week, plan);
   if (log.sets.every((set) => Number(set.reps) >= high && Number(set.rir) >= plannedRir)) {
-    return 'Усі підходи досягли верхньої межі з потрібним запасом: наступного разу додай найменший доступний крок ваги.';
+    return `Усі підходи досягли верхньої межі з потрібним запасом: наступного разу додай ${loadStepFor(item)} кг${item.ex.eq === 'dumbbell' ? ' на одну гантель' : ''}.`;
   }
   if (log.sets.some((set) => Number(set.reps) < low || Number(set.rir) < plannedRir)) {
     return 'Залиши або трохи зменш вагу, доки всі підходи не ввійдуть у діапазон із запланованим RIR.';
@@ -127,4 +147,4 @@ function progressionSuggestion(log, item, week, plan, heavy) {
   return 'Залиши цю вагу й спробуй додати повтори в межах діапазону.';
 }
 
-export { HEAVY_LOAD, round2, GOAL_CONFIG, GOAL_GUIDANCE, normalizeAnchor, estimated1RM, loadFor, isLoadable, REPS, PROGRESSION, setsFor, rirFor, repsFor, tempoFor, restFor, progressionSuggestion };
+export { HEAVY_LOAD, DEFAULT_LOAD_STEP, roundToStep, round2, loadStepFor, GOAL_CONFIG, GOAL_GUIDANCE, normalizeAnchor, estimated1RM, e1rmConfidence, loadFor, isLoadable, REPS, PROGRESSION, setsFor, rirFor, repsFor, tempoFor, restFor, progressionSuggestion };

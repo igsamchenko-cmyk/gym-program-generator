@@ -58,7 +58,7 @@ export default function ProgressDashboard({ history = [], plannedSets = 0, plann
           <h3 className="tk-subhead">Найкращий орієнтовний 1ПМ за вправами</h3>
           <div className="tk-records">
             {records.map((record) => (
-              <div key={record.name}><b>{record.name}</b><span>{record.e1rm} кг · {record.weight} × {record.reps}</span></div>
+              <div key={record.name}><b>{record.name}</b><span>{record.e1rm} кг · {record.weight} × {record.reps} · надійність: {record.confidence}</span></div>
             ))}
           </div>
         </>
@@ -73,7 +73,7 @@ export default function ProgressDashboard({ history = [], plannedSets = 0, plann
         ))}
       </details>
       <p className="tk-hint" style={{ marginBottom: 0 }}>
-        Тоннаж враховує підходи із заповненими вагою та повторами. Орієнтовний 1ПМ — розрахункова метрика для порівняння, не команда тестувати максимум.
+        Тоннаж враховує підходи із заповненими вагою та повторами. Орієнтовний 1ПМ — розрахункова метрика для порівняння, не команда тестувати максимум. Підходи понад 15 повторів або з RIR понад 5 не стають e1RM-якорями; 11–15 повторів позначаються як низька надійність.
       </p>
     </section>
   );

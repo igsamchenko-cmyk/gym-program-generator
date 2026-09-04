@@ -5,6 +5,7 @@ export type PrescriptionEdit = {
   tempo?: string;
   rest?: string;
   load?: number;
+  loadStep?: number;
   fixedSets?: boolean;
   fixedLoad?: boolean;
 };
@@ -34,10 +35,11 @@ export function sanitizeCoachEdits(value: unknown): CoachEdits {
     if (!raw || typeof raw !== 'object') return [];
     const item = raw as Record<string, unknown>;
     const clean: PrescriptionEdit = {};
-    const sets = finite(item.sets, 1, 12), rir = finite(item.rir, 0, 10), load = finite(item.load, 0, 1000);
+    const sets = finite(item.sets, 1, 12), rir = finite(item.rir, 0, 10), load = finite(item.load, 0, 1000), loadStep = finite(item.loadStep, 0.1, 50);
     if (sets !== undefined) clean.sets = Math.round(sets);
     if (rir !== undefined) clean.rir = Math.round(rir);
     if (load !== undefined) clean.load = load;
+    if (loadStep !== undefined) clean.loadStep = loadStep;
     if (item.fixedSets === true) clean.fixedSets = true;
     if (item.fixedLoad === true) clean.fixedLoad = true;
     if (typeof item.reps === 'string' && /^\d{1,3}(?:[–-]\d{1,3}|\s*с)?$/u.test(item.reps.trim())) clean.reps = item.reps.trim().replace('-', '–');
@@ -51,7 +53,7 @@ export function sanitizeCoachEdits(value: unknown): CoachEdits {
     const name = typeof item.name === 'string' ? item.name.trim().slice(0, 120) : '';
     const day = finite(item.day, 0, 5);
     if (!name || day === undefined) return [];
-    const load = finite(item.load, 0, 1000);
+    const load = finite(item.load, 0, 1000), loadStep = finite(item.loadStep, 0.1, 50);
     return [{
       id: typeof item.id === 'string' ? item.id.slice(0, 100) : 'custom-' + Math.random().toString(36).slice(2),
       day: Math.round(day), name,
@@ -63,6 +65,7 @@ export function sanitizeCoachEdits(value: unknown): CoachEdits {
       tempo: typeof item.tempo === 'string' ? item.tempo.slice(0, 20) : '2-0-2',
       rest: typeof item.rest === 'string' ? item.rest.slice(0, 40) : '90 с',
       ...(load === undefined ? {} : { load }),
+      ...(loadStep === undefined ? {} : { loadStep }),
     }];
   }) : [];
   return { prescriptions, customExercises };
@@ -125,13 +128,15 @@ export function sanitizeClientProfiles(value: unknown): ClientProfile[] {
   });
 }
 export function exerciseRecords(history: any[] = []) {
-  const records = new Map<string, { name: string; e1rm: number; weight: number; reps: number; at: string }>();
+  const records = new Map<string, { name: string; e1rm: number; weight: number; reps: number; confidence: string; at: string }>();
   history.forEach((session) => (session.exercises || []).forEach((exercise: any) => (exercise.sets || []).forEach((set: any) => {
     const weight = Number(set.weight), reps = Number(set.reps), rir = Number(set.rir || 0);
-    if (!(weight > 0) || !(reps > 0)) return;
+    if (!(weight > 0) || !(reps > 0) || reps > 15 || rir > 5) return;
     const e1rm = Math.round(weight * (1 + (reps + rir) / 30) * 10) / 10;
+    const confidence = reps <= 6 && set.rir != null && rir <= 2 ? 'вища'
+      : reps <= 10 && set.rir != null && rir <= 4 ? 'середня' : 'низька';
     const current = records.get(exercise.exerciseId);
-    if (!current || e1rm > current.e1rm) records.set(exercise.exerciseId, { name: exercise.name, e1rm, weight, reps, at: session.completedAt });
+    if (!current || e1rm > current.e1rm) records.set(exercise.exerciseId, { name: exercise.name, e1rm, weight, reps, confidence, at: session.completedAt });
   })));
   // e1RM має сенс порівнювати в межах тієї самої вправи, а не ранжувати
   // жим ногами проти згинання рук. Список нейтрально впорядковано за назвою.

@@ -13,13 +13,13 @@ import {
   PLACE_LABEL, HOME_EQUIPMENT_LABEL, WEEKDAYS, LEVEL_LABEL, GOAL_LABEL, PROGRAM_STYLE_LABEL, programStyleNote,
 } from './data/labels.js';
 import {
-  SEX, BALANCE, FOCUS, CUSTOM_FOCUS, AVOID, GROUP_CAP, GOAL_GUIDANCE, dayLabel, focusForPriority, loadFor, estimated1RM, isLoadable, PROGRESSION, ageFlags, isExerciseAllowed,
+  SEX, BALANCE, FOCUS, CUSTOM_FOCUS, AVOID, GROUP_CAP, GOAL_GUIDANCE, dayLabel, focusForPriority, loadFor, loadStepFor, estimated1RM, e1rmConfidence, isLoadable, PROGRESSION, ageFlags, isExerciseAllowed,
   buildPlan, isHeavy, setsFor, rirFor, repsFor, tempoFor, restFor, progressionSuggestion, targetFor,
   weeklyVolume, sessionMinutes, scheduleWarnings, frequency, techMarks, warmup, warmupMinutes, applySwapsToPlan,
   DEFAULT_PROFILE, sanitizeProfile,
 } from './engine.js';
 import {
-  APP_STATE_VERSION, SHARE_PREFIX, cleanAnchors, cleanJournal, cleanPendingAdaptation, cleanRevisions, decodeSharePayload,
+  APP_STATE_VERSION, SHARE_PREFIX, assignPendingAdaptation, cancelPendingAdaptation, cleanAnchors, cleanJournal, cleanPendingAdaptation, cleanRevisions, decodeSharePayload,
   diffProgramSnapshots, encodeSharePayload, hydrateSwaps, journalKey, makeBackupPayload, makeProgramSnapshot, makeSharePayload,
   serializeSwaps,
 } from './appState.js';
@@ -313,7 +313,7 @@ function Wizard({ p, set, onBuild }) {
             if (e.key === 'Enter') e.currentTarget.blur();
             if (e.key === 'Escape') { setAgeDraft(String(p.age)); e.currentTarget.blur(); }
           }} />
-        <div className="tk-hint">{ageNote(p)}</div>
+        <div className="tk-hint">{ageNote(p)} Діапазон автоматичного конструктора — 14–70 років.</div>
       </div>
 
       <div className="tk-field">
@@ -429,6 +429,7 @@ function Wizard({ p, set, onBuild }) {
 
       <div className="tk-field">
         <HelpLabel label="Короткий скринінг перед тренуванням">Відповіді не зберігаються і не потрапляють у посилання. Це не діагностика, а запобіжник перед автоматичною програмою.</HelpLabel>
+        <div className="tk-hint">Автоматичний режим не охоплює вагітність і післяпологовий період, реабілітацію, остеопороз та індивідуальне ведення відомих захворювань, включно з контрольованою гіпертензією.</div>
         <span className="tk-lbl">Чи тренувався регулярно протягом останніх місяців?</span>
         <OptRow ariaLabel="Регулярна активність" options={[['yes', 'Так'], ['no', 'Ні']]} value={screen.activity} onChange={(activity) => setScreen((s) => ({ ...s, activity }))} />
         <span className="tk-lbl" style={{ marginTop: 10 }}>Є біль у грудях, запаморочення, непритомність або незвична задишка?</span>
@@ -467,6 +468,8 @@ function ExRow({ item, idx, week, plan, heavy, tech, onSwap, onCoachEdit, onRemo
     ? rawAnchor
     : rawAnchor ? { weight: rawAnchor, reps: 8, rir: 2 } : {};
   const e1rm = typeof rawAnchor === 'object' && rawAnchor ? estimated1RM(rawAnchor) : null;
+  const e1rmQuality = typeof rawAnchor === 'object' && rawAnchor ? e1rmConfidence(rawAnchor) : null;
+  const loadUnit = item.ex.eq === 'dumbbell' ? 'кг на одну гантель' : 'кг';
   const progression = progressionSuggestion(log, item, week, plan, heavy);
   const setLog = (index, field, value) => {
     const next = Array.from({ length: sets }, (_, i) => ({ ...((log.sets || [])[i] || {}) }));
@@ -490,14 +493,15 @@ function ExRow({ item, idx, week, plan, heavy, tech, onSwap, onCoachEdit, onRemo
         </div>
         {isLoadable(item.ex) && (
           <div className="tk-load">
-            {loadFor(item, week, heavy, anchors, plan) && <b>{loadFor(item, week, heavy, anchors, plan)} кг</b>}
-            <input className="tk-wnum" aria-label="Орієнтир ваги" type="number" step="0.5" min="0" placeholder="вага, кг"
+            {loadFor(item, week, heavy, anchors, plan) && <b>{loadFor(item, week, heavy, anchors, plan)} {loadUnit}</b>}
+            <input className="tk-wnum" aria-label={item.ex.eq === 'dumbbell' ? 'Орієнтир ваги однієї гантелі' : 'Орієнтир ваги'} type="number" step="0.1" min="0" placeholder={item.ex.eq === 'dumbbell' ? 'кг/гантель' : 'вага, кг'}
               value={anchor.weight || ''} onChange={(e) => onAnchor(item.ex.id, 'weight', e.target.value)} />
             <input className="tk-wnum" aria-label="Повтори з орієнтирною вагою" type="number" step="1" min="1" max="30" placeholder="повтори"
               value={anchor.reps || ''} onChange={(e) => onAnchor(item.ex.id, 'reps', e.target.value)} />
             <input className="tk-wnum" aria-label="RIR орієнтирного підходу" type="number" step="1" min="0" max="10" placeholder="RIR"
               value={anchor.rir ?? ''} onChange={(e) => onAnchor(item.ex.id, 'rir', e.target.value)} />
-            {e1rm && <span style={{ fontSize: 11, color: 'var(--steel)' }}>орієнтовний 1ПМ ≈ {roundDisplay(e1rm)} кг · планова вага залежить від цілі й тижня</span>}
+            {e1rm && <span style={{ fontSize: 11, color: 'var(--steel)' }}>орієнтовний 1ПМ ≈ {roundDisplay(e1rm)} кг · {e1rmQuality.label} · планова вага залежить від цілі й тижня</span>}
+            {e1rmQuality && !e1rmQuality.eligible && <span style={{ fontSize: 11, color: 'var(--hot)' }}>Цей підхід не є якірним для e1RM: автоматичний розрахунок не використовує понад 15 повторів або RIR понад 5.</span>}
             {rawAnchor && typeof rawAnchor !== 'object' && <span style={{ fontSize: 11, color: 'var(--hot)' }}>старий орієнтир: підтвердь повтори або RIR, щоб перейти на розрахунок від орієнтовного 1ПМ</span>}
           </div>
         )}
@@ -513,7 +517,7 @@ function ExRow({ item, idx, week, plan, heavy, tech, onSwap, onCoachEdit, onRemo
           {Array.from({ length: sets }, (_, setIndex) => (
             <div key={setIndex} style={{ display: 'flex', gap: 6, alignItems: 'end', flexWrap: 'wrap' }}>
               <b style={{ fontSize: 11 }}>Підхід {setIndex + 1}</b>
-              {isLoadable(item.ex) && <label className="tk-logfield">кг<input type="number" min="0" step="0.5" value={log.sets?.[setIndex]?.weight ?? ''} onChange={(e) => setLog(setIndex, 'weight', e.target.value)} /></label>}
+              {isLoadable(item.ex) && <label className="tk-logfield">{item.ex.eq === 'dumbbell' ? 'кг/гантель' : 'кг'}<input type="number" min="0" step="0.1" value={log.sets?.[setIndex]?.weight ?? ''} onChange={(e) => setLog(setIndex, 'weight', e.target.value)} /></label>}
               <label className="tk-logfield">{item.ex.u === 'time' ? 'сек' : 'повт.'}<input type="number" min="0" step="1" value={log.sets?.[setIndex]?.reps ?? ''} onChange={(e) => setLog(setIndex, 'reps', e.target.value)} /></label>
               <label className="tk-logfield">RIR<input type="number" min="0" max="10" step="1" value={log.sets?.[setIndex]?.rir ?? ''} onChange={(e) => setLog(setIndex, 'rir', e.target.value)} /></label>
             </div>
@@ -538,10 +542,11 @@ function ExRow({ item, idx, week, plan, heavy, tech, onSwap, onCoachEdit, onRemo
             <label>RIR<input type="number" min="0" max="10" placeholder={String(rirFor(item, week, plan))} value={item.coach?.rir ?? ''} onChange={(e) => onCoachEdit('rir', e.target.value)} /></label>
             <label>Темп<input type="text" maxLength="12" placeholder={tempo} value={item.coach?.tempo ?? ''} onChange={(e) => onCoachEdit('tempo', e.target.value)} /></label>
             <label>Пауза<input type="text" maxLength="40" placeholder={restFor(item, plan, heavy)} value={item.coach?.rest ?? ''} onChange={(e) => onCoachEdit('rest', e.target.value)} /></label>
-            {isLoadable(item.ex) && <label>Базова вага, кг<input type="number" min="0" max="1000" step="0.5" value={item.coach?.load ?? ''} onChange={(e) => onCoachEdit('load', e.target.value)} /></label>}
+            {isLoadable(item.ex) && <label>Базова вага, {loadUnit}<input type="number" min="0" max="1000" step="0.1" value={item.coach?.load ?? ''} onChange={(e) => onCoachEdit('load', e.target.value)} /></label>}
+            {isLoadable(item.ex) && <label>Крок доступної ваги, кг<input type="number" min="0.1" max="50" step="0.1" placeholder={String(loadStepFor(item))} value={item.coach?.loadStep ?? ''} onChange={(e) => onCoachEdit('loadStep', e.target.value)} /></label>}
             {item.coach?.sets && <label className="tk-check"><input type="checkbox" checked={!!item.coach.fixedSets} onChange={(e) => onCoachEdit('fixedSets', e.target.checked)} /><span>Фіксувати підходи в усі тижні</span></label>}
             {isLoadable(item.ex) && item.coach?.load && <label className="tk-check"><input type="checkbox" checked={!!item.coach.fixedLoad} onChange={(e) => onCoachEdit('fixedLoad', e.target.checked)} /><span>Фіксувати вагу в усі тижні</span></label>}
-            <p className="tk-hint">Без фіксації ручне значення є базовим і змінюється за тижневою періодизацією та на делоаді.</p>
+            <p className="tk-hint">Без фіксації ручне значення є базовим і змінюється за тижневою періодизацією та на делоаді. Крок ваги за замовчуванням залежить від типу обладнання; для гантелей значення вказується на одну гантель. Для конкретного стека чи мікродисків введи фактичний крок.</p>
             <button type="button" className="tk-mini" onClick={() => onCoachEdit('__reset', '')}>Скинути ручні правки</button>
           </div>
         )}
@@ -885,7 +890,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
         const edit = { ...(prescriptions[key] || {}) };
         if (raw === '') delete edit[field];
         else if (['fixedSets', 'fixedLoad'].includes(field)) edit[field] = !!raw;
-        else if (['sets', 'rir', 'load'].includes(field)) {
+        else if (['sets', 'rir', 'load', 'loadStep'].includes(field)) {
           const value = Number(raw);
           if (Number.isFinite(value) && value >= 0) edit[field] = value;
         } else edit[field] = String(raw).slice(0, 40);
@@ -972,10 +977,20 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
     if (!window.confirm('Видалити цей завершений запис? Дію неможливо скасувати без резервної копії.')) return;
     const removed = sessionHistory.find((session) => session.id === id);
     setSessionHistory((current) => current.filter((session) => session.id !== id));
-    if (removed) updateLog(`session:${removed.week - 1}:${removed.day - 1}`, 'done', false);
+    if (removed) {
+      updateLog(`session:${removed.week - 1}:${removed.day - 1}`, 'done', false);
+      setPendingAdaptation((current) => cancelPendingAdaptation(current, removed.id));
+    }
     showToast('Помилковий запис видалено');
   };
   const updateLog = (key, field, raw) => {
+    const match = key.match(/^session:(\d+):(\d+)$/u) || key.match(/^(\d+):(\d+):/u);
+    const meaningful = field !== 'done' && raw !== '' && (field !== 'sets' || raw.some((set) => Object.keys(set).length));
+    if (autoAdjust && match && meaningful) {
+      const targetWeek = Number(match[1]), targetDay = Number(match[2]);
+      const targetDone = journal[`session:${targetWeek}:${targetDay}`]?.done;
+      if (!targetDone) setPendingAdaptation((current) => assignPendingAdaptation(current, targetWeek, targetDay, targetDone));
+    }
     setJournal((current) => {
       const entry = { ...(current[key] || {}) };
       if (field === 'done') entry.done = !!raw;
@@ -1041,9 +1056,12 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
   const adaptation = useMemo(() => {
     if (!autoAdjust) return { level: 'normal', message: 'Автоматичну корекцію вимкнено.' };
     if (!pendingAdaptation) return { level: 'normal', message: 'Одноразову корекцію наступної сесії не заплановано.' };
+    const target = pendingAdaptation.week == null
+      ? 'Очікує першої фактично розпочатої незавершеної сесії'
+      : `Тиждень ${pendingAdaptation.week + 1}, день ${pendingAdaptation.day + 1}`;
     return {
       ...pendingAdaptation.decision,
-      message: `Тиждень ${pendingAdaptation.week + 1}, день ${pendingAdaptation.day + 1}: ${pendingAdaptation.decision.message}`,
+      message: `${target}: ${pendingAdaptation.decision.message}`,
     };
   }, [autoAdjust, pendingAdaptation]);
   const view = useMemo(() => {
@@ -1087,7 +1105,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
             ...weeks.map((w) => {
               const h = isHeavy(di, i, w, view);
               const kg = loadFor(it, w, h, anchors, view);
-              return setsFor(it, w, view, h) + '×' + repsFor(it, profile.goal, w, h, view) + ' RIR' + rirFor(it, w, view) + (kg ? ' · ' + kg + 'кг' : '');
+              return setsFor(it, w, view, h) + '×' + repsFor(it, profile.goal, w, h, view) + ' RIR' + rirFor(it, w, view) + (kg ? ' · ' + kg + (it.ex.eq === 'dumbbell' ? 'кг/гантель' : 'кг') : '');
             })]);
         });
         const nm = ((di + 1) + '. ' + (profile.weekdays.length === profile.days ? WEEKDAYS[profile.weekdays[di]] + ' ' : '') + d.name);
@@ -1214,7 +1232,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
     setAnchors((current) => {
       const next = { ...current };
       exercises.forEach((exercise) => {
-        const best = exercise.sets.filter((set) => Number(set.weight) > 0 && Number(set.reps) > 0)
+        const best = exercise.sets.filter((set) => Number(set.weight) > 0 && Number(set.reps) > 0 && Number(set.reps) <= 15 && set.rir != null && Number(set.rir) <= 5)
           .sort((a, b) => (Number(b.weight) * (1 + (Number(b.reps) + Number(b.rir || 0)) / 30))
             - (Number(a.weight) * (1 + (Number(a.reps) + Number(a.rir || 0)) / 30)))[0];
         if (best) next[exercise.exerciseId] = { weight: Number(best.weight), reps: Number(best.reps), rir: Number(best.rir || 0) };
@@ -1223,12 +1241,10 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
     });
     const decision = trainingAdaptation([...sessionHistory, snapshot]);
     if (autoAdjust && decision.level !== 'normal') {
-      const nextDay = (day + 1) % view.days.length;
-      const nextWeek = nextDay === 0 ? (wk + 1) % weeks.length : wk;
-      setPendingAdaptation({ week: nextWeek, day: nextDay, sourceId: snapshot.id, decision });
+      setPendingAdaptation({ week: null, day: null, sourceId: snapshot.id, decision });
     } else setPendingAdaptation(null);
     updateLog(sessionKey, 'done', true);
-    showToast('Сесію додано до історії' + (decision.level !== 'normal' && autoAdjust ? '; наступну сесію одноразово полегшено' : ''));
+    showToast('Сесію додано до історії' + (decision.level !== 'normal' && autoAdjust ? '; корекція застосовується до наступної фактично розпочатої сесії' : ''));
   };
 
   return (
@@ -1327,10 +1343,10 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
           </div>
           <div className="tk-meta">
             ~{mins} хв разом із розминкою (~{roundDisplay(warmupMinutes(view, view.days[day]))} хв) · {view.days[day].items.length} вправ
-            {view.days[day].trimmed ? ' · сесію скорочено під ліміт ' + profile.timeCap + ' хв' : ''}
+            {view.automaticTimeCap ? ' · автоматична практична межа ' + view.effectiveTimeCap + ' хв' : view.days[day].trimmed ? ' · сесію скорочено під обраний ліміт ' + view.effectiveTimeCap + ' хв' : ''}
             {view.days[day].overCap ? ' · у ліміт не вкладається навіть після скорочення — лишились самі базові рухи' : ''}
           </div>
-          {!profile.timeCap && mins > 100 && (
+          {!view.effectiveTimeCap && mins > 100 && (
             <div className="tk-alert" style={{ marginTop: -4 }}>
               <b>Довга сесія</b>{mins} хв — це та зона, де якість останніх вправ падає швидше, ніж накопичується стимул. Постав ліміт часу в параметрах або рознеси день на два.
             </div>
@@ -1403,7 +1419,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
           {(view.flags.teen || profile.balance !== 'steady') && <div className="tk-rule"><b>Індивідуальний вибір вправ</b>{ageNote(profile)}</div>}
         </div>
 
-        <p className="tk-foot">Це навчальний прототип, а не медична порада. Різкий біль, оніміння чи запаморочення — привід зупинити тренування й звернутися до лікаря.</p>
+        <p className="tk-foot">Межі продукту: 14–70 років; автоматичні плани не призначені для вагітності чи післяпологового періоду, реабілітації, остеопорозу або відомих серцево-судинних, метаболічних чи ниркових станів, зокрема контрольованої гіпертензії. Це навчальний локальний прототип, не медична порада і не зашифрована комерційна CRM. Різкий біль, оніміння, біль у грудях, непритомність чи незвична задишка — привід зупинити тренування й звернутися по медичну допомогу.</p>
       </div>
     </div>
   );
