@@ -1,7 +1,8 @@
 import { sanitizeHistory } from './journalAnalytics.ts';
 import { sanitizeClientProfiles, sanitizeCoachEdits } from './coachTools.ts';
+import { sanitizeProfile } from './engine.js';
 
-export const APP_STATE_VERSION = 5;
+export const APP_STATE_VERSION = 6;
 export const SHARE_PREFIX = '#p=';
 
 const isObject = (value) => value && typeof value === 'object' && !Array.isArray(value);
@@ -108,15 +109,75 @@ export function makeSharePayload({ profile, anchors, swaps, coachEdits }) {
   };
 }
 
+export function makeProgramSnapshot({ profile, anchors, swaps, coachEdits }) {
+  return {
+    profile: sanitizeProfile(profile),
+    anchors: cleanAnchors(anchors),
+    swaps: serializeSwaps(swaps),
+    coachEdits: sanitizeCoachEdits(coachEdits),
+  };
+}
+
+function cleanProgramSnapshot(value) {
+  if (!isObject(value) || !isObject(value.profile)) return null;
+  return makeProgramSnapshot(value);
+}
+
 export function cleanRevisions(value) {
   if (!Array.isArray(value)) return [];
-  return value.slice(-100).flatMap((raw) => {
+  return value.slice(-30).flatMap((raw) => {
     if (!isObject(raw) || typeof raw.summary !== 'string') return [];
     const at = typeof raw.at === 'string' && !Number.isNaN(Date.parse(raw.at)) ? raw.at : new Date(0).toISOString();
-    return [{ at, summary: raw.summary.trim().slice(0, 240) }].filter((item) => item.summary);
+    const snapshot = cleanProgramSnapshot(raw.snapshot);
+    const item = {
+      id: typeof raw.id === 'string' ? raw.id.slice(0, 100) : `revision-${at}`,
+      at, summary: raw.summary.trim().slice(0, 240),
+      ...(snapshot ? { snapshot } : {}),
+    };
+    return item.summary ? [item] : [];
   });
 }
-export function makeBackupPayload({ profile, anchors, swaps, coachEdits, journal, history, revisions, clientName, clients, autoAdjust, built }) {
+
+const displayValue = (value) => {
+  if (value === undefined) return '—';
+  const encoded = JSON.stringify(value);
+  return encoded.length > 80 ? encoded.slice(0, 77) + '…' : encoded;
+};
+
+export function diffProgramSnapshots(from, to) {
+  const flatten = (value, prefix = '', result = {}) => {
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => flatten(item, `${prefix}[${index}]`, result));
+    } else if (isObject(value)) {
+      Object.keys(value).sort().forEach((key) => flatten(value[key], prefix ? `${prefix}.${key}` : key, result));
+    } else if (prefix) result[prefix] = value;
+    return result;
+  };
+  const before = flatten(cleanProgramSnapshot(from) || {});
+  const after = flatten(cleanProgramSnapshot(to) || {});
+  return [...new Set([...Object.keys(before), ...Object.keys(after)])].sort().flatMap((path) =>
+    JSON.stringify(before[path]) === JSON.stringify(after[path]) ? [] : [{ path, before: displayValue(before[path]), after: displayValue(after[path]) }]);
+}
+
+export function cleanPendingAdaptation(value) {
+  if (!isObject(value) || !isObject(value.decision)) return null;
+  const week = Number(value.week), day = Number(value.day);
+  const decision = value.decision;
+  if (!Number.isInteger(week) || week < 0 || week > 10 || !Number.isInteger(day) || day < 0 || day > 5) return null;
+  if (!['reduce', 'recover'].includes(decision.level)) return null;
+  return {
+    week, day,
+    sourceId: typeof value.sourceId === 'string' ? value.sourceId.slice(0, 120) : '',
+    decision: {
+      level: decision.level,
+      setFactor: Math.min(1, Math.max(0.4, Number(decision.setFactor) || 1)),
+      loadFactor: Math.min(1, Math.max(0.5, Number(decision.loadFactor) || 1)),
+      message: typeof decision.message === 'string' ? decision.message.slice(0, 500) : '',
+    },
+  };
+}
+
+export function makeBackupPayload({ profile, anchors, swaps, coachEdits, journal, history, revisions, clientName, clients, autoAdjust, pendingAdaptation, built }) {
   return {
     ...makeSharePayload({ profile, anchors, swaps, coachEdits }),
     journal: cleanJournal(journal),
@@ -125,6 +186,7 @@ export function makeBackupPayload({ profile, anchors, swaps, coachEdits, journal
     clientName: typeof clientName === 'string' ? clientName.trim().slice(0, 120) : '',
     clients: sanitizeClientProfiles(clients),
     autoAdjust: autoAdjust !== false,
+    pendingAdaptation: cleanPendingAdaptation(pendingAdaptation),
     built: !!built,
     exportedAt: new Date().toISOString(),
   };

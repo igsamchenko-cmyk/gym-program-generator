@@ -184,7 +184,15 @@ const LOADS = {
 };
 Object.keys(MACRO).forEach((k) => MACRO[k].forEach((w, i) => { w.n = i + 1; w.load = LOADS[k][i]; }));
 
-const VOLUME_TARGET = { beg: [8, 14], int: [11, 19], adv: [14, 23] };
+// Практичні орієнтири, а не універсальні «мінімально ефективні дози».
+// Різні цілі мають різний бюджет силової роботи: health/fatloss не повинні
+// повторно роздуватися до гіпертрофійних меж після застосування setFactor.
+const VOLUME_TARGET = {
+  hyper: { beg: [8, 14], int: [11, 19], adv: [14, 23] },
+  strength: { beg: [6, 12], int: [8, 15], adv: [10, 18] },
+  fatloss: { beg: [5, 10], int: [7, 12], adv: [8, 14] },
+  health: { beg: [4, 8], int: [5, 10], adv: [6, 12] },
+};
 const MUSCLE_CAP = { back: 1.45, quads: 1.35, delts: 1.25, glutes: 1.2, chest: 1.05, hams: 1.0, triceps: 1.05, biceps: 0.95, calves: 0.85, core: 0.85 };
 function ageFlags(age) {
   return {
@@ -667,8 +675,9 @@ const isHeavy = (di, idx, week, plan) => {
   return (week.heavy === 'A' && idx === plan.days[di].heavyA) || (week.heavy === 'B' && idx === plan.days[di].heavyB);
 };
 
-function targetFor(level, muscle, teen, _sex) {
-  const [lo, hi] = VOLUME_TARGET[level];
+function targetFor(level, muscle, teen, _sex, goal = 'hyper') {
+  const targets = VOLUME_TARGET[goal] || VOLUME_TARGET.hyper;
+  const [lo, hi] = targets[level] || targets.int;
   const k = (MUSCLE_CAP[muscle] || 1) * (teen ? 0.8 : 1);
   return [Math.round(lo * k), Math.round(hi * k)];
 }
@@ -714,7 +723,7 @@ function normalizePeakVolume(plan) {
     const volume = weeklyVolume(plan, peak).byMuscle;
     const over = Object.keys(MUSCLE)
       .map((muscle) => {
-        const [, hi] = targetFor(plan.profile.level, muscle, plan.flags.teen, plan.profile.sex);
+        const [, hi] = targetFor(plan.profile.level, muscle, plan.flags.teen, plan.profile.sex, plan.profile.goal);
         return { muscle, value: Math.round(volume[muscle] || 0), hi };
       })
       .filter((entry) => entry.value > entry.hi)
@@ -751,7 +760,7 @@ function normalizePeakVolume(plan) {
   while (guard++ < 200) {
     const volume = weeklyVolume(plan, peak).byMuscle;
     const below = Object.keys(MUSCLE).map((muscle) => {
-      const [lo] = targetFor(plan.profile.level, muscle, plan.flags.teen, plan.profile.sex);
+      const [lo] = targetFor(plan.profile.level, muscle, plan.flags.teen, plan.profile.sex, plan.profile.goal);
       return { muscle, value: Math.round(volume[muscle] || 0), lo };
     }).filter((entry) => entry.value < entry.lo && !floorBlocked.has(entry.muscle))
       .sort((a, b) => (b.lo - b.value) - (a.lo - a.value));
@@ -765,7 +774,7 @@ function normalizePeakVolume(plan) {
     candidate.item.base += 1;
     const candidateVolume = weeklyVolume(plan, peak).byMuscle;
     const exceeds = Object.keys(MUSCLE).some((key) => {
-      const [, hi] = targetFor(plan.profile.level, key, plan.flags.teen, plan.profile.sex);
+      const [, hi] = targetFor(plan.profile.level, key, plan.flags.teen, plan.profile.sex, plan.profile.goal);
       return Math.round(candidateVolume[key] || 0) > hi;
     });
     const exceedsTime = plan.profile.timeCap && sessionMinutes(candidate.day, peak, plan, candidate.dayIndex) > plan.profile.timeCap;
@@ -783,7 +792,7 @@ function normalizePeakVolume(plan) {
   const finalVolume = weeklyVolume(plan, peak).byMuscle;
   const unresolved = {}, belowFloor = {};
   Object.keys(MUSCLE).forEach((muscle) => {
-    const [lo, hi] = targetFor(plan.profile.level, muscle, plan.flags.teen, plan.profile.sex);
+    const [lo, hi] = targetFor(plan.profile.level, muscle, plan.flags.teen, plan.profile.sex, plan.profile.goal);
     const value = Math.round(finalVolume[muscle] || 0);
     if (value > hi) unresolved[muscle] = { value, hi };
     if (value < lo) belowFloor[muscle] = { value, lo };

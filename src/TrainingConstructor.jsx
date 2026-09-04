@@ -19,8 +19,8 @@ import {
   DEFAULT_PROFILE, sanitizeProfile,
 } from './engine.js';
 import {
-  APP_STATE_VERSION, SHARE_PREFIX, cleanAnchors, cleanJournal, cleanRevisions, decodeSharePayload,
-  encodeSharePayload, hydrateSwaps, journalKey, makeBackupPayload, makeSharePayload,
+  APP_STATE_VERSION, SHARE_PREFIX, cleanAnchors, cleanJournal, cleanPendingAdaptation, cleanRevisions, decodeSharePayload,
+  diffProgramSnapshots, encodeSharePayload, hydrateSwaps, journalKey, makeBackupPayload, makeProgramSnapshot, makeSharePayload,
   serializeSwaps,
 } from './appState.js';
 
@@ -533,12 +533,15 @@ function ExRow({ item, idx, week, plan, heavy, tech, onSwap, onCoachEdit, onRemo
         {item.why && item.why.length > 0 && <button className="tk-mini" onClick={() => setWhy(!why)}>{why ? 'Згорнути' : 'Чому саме ця вправа'}</button>}
         {edit && (
           <div className="tk-coach-editor">
-            <label>Підходи<input type="number" min="1" max="12" placeholder={String(sets)} value={item.coach?.sets ?? ''} onChange={(e) => onCoachEdit('sets', e.target.value)} /></label>
+            <label>Базові підходи<input type="number" min="1" max="12" placeholder={String(sets)} value={item.coach?.sets ?? ''} onChange={(e) => onCoachEdit('sets', e.target.value)} /></label>
             <label>Повтори<input type="text" maxLength="12" placeholder={repsFor(item, p.goal, week, heavy, plan)} value={item.coach?.reps ?? ''} onChange={(e) => onCoachEdit('reps', e.target.value)} /></label>
             <label>RIR<input type="number" min="0" max="10" placeholder={String(rirFor(item, week, plan))} value={item.coach?.rir ?? ''} onChange={(e) => onCoachEdit('rir', e.target.value)} /></label>
             <label>Темп<input type="text" maxLength="12" placeholder={tempo} value={item.coach?.tempo ?? ''} onChange={(e) => onCoachEdit('tempo', e.target.value)} /></label>
             <label>Пауза<input type="text" maxLength="40" placeholder={restFor(item, plan, heavy)} value={item.coach?.rest ?? ''} onChange={(e) => onCoachEdit('rest', e.target.value)} /></label>
-            {isLoadable(item.ex) && <label>Планова вага, кг<input type="number" min="0" max="1000" step="0.5" value={item.coach?.load ?? ''} onChange={(e) => onCoachEdit('load', e.target.value)} /></label>}
+            {isLoadable(item.ex) && <label>Базова вага, кг<input type="number" min="0" max="1000" step="0.5" value={item.coach?.load ?? ''} onChange={(e) => onCoachEdit('load', e.target.value)} /></label>}
+            {item.coach?.sets && <label className="tk-check"><input type="checkbox" checked={!!item.coach.fixedSets} onChange={(e) => onCoachEdit('fixedSets', e.target.checked)} /><span>Фіксувати підходи в усі тижні</span></label>}
+            {isLoadable(item.ex) && item.coach?.load && <label className="tk-check"><input type="checkbox" checked={!!item.coach.fixedLoad} onChange={(e) => onCoachEdit('fixedLoad', e.target.checked)} /><span>Фіксувати вагу в усі тижні</span></label>}
+            <p className="tk-hint">Без фіксації ручне значення є базовим і змінюється за тижневою періодизацією та на делоаді.</p>
             <button type="button" className="tk-mini" onClick={() => onCoachEdit('__reset', '')}>Скинути ручні правки</button>
           </div>
         )}
@@ -580,7 +583,7 @@ function VolumePanel({ plan, week }) {
       <div className="tk-eyebrow">Тижневий обсяг · робочі підходи</div>
       <div className="tk-vol">
         {Object.keys(MUSCLE).map((k) => {
-          const [lo, hi] = targetFor(plan.profile.level, k, plan.flags.teen, plan.profile.sex);
+          const [lo, hi] = targetFor(plan.profile.level, k, plan.flags.teen, plan.profile.sex, plan.profile.goal);
           const v = Math.round(byMuscle[k] || 0);
           const fr = freq[k] || 0;
           const cls = v < lo ? 'low' : v > hi ? 'over' : '';
@@ -597,7 +600,7 @@ function VolumePanel({ plan, week }) {
         })}
       </div>
       <p className="tk-hint" style={{ marginTop: 14 }}>
-        Друге число — консервативна стеля для рівня «{LEVEL_LABEL[plan.profile.level]}»; вона різна по групах. Сіре заповнення нижче орієнтиру не означає автоматично недостатню програму: потреба залежить від стажу, пріоритетів, непрямої роботи та переносимості. Другий рядок під групою — розподіл по підспецифікаціях:
+        Друге число — консервативна стеля для рівня «{LEVEL_LABEL[plan.profile.level]}» і цілі «{GOAL_LABEL[plan.profile.goal]}»; вона різна по групах. Сіре заповнення нижче орієнтиру не означає автоматично недостатню програму: потреба залежить від стажу, пріоритетів, непрямої роботи та переносимості. Другий рядок під групою — розподіл по підспецифікаціях:
         різні тяги змінюють акцент роботи спини, а положення коліна змінює відносний внесок литкового й камбалоподібного м’язів.
       </p>
       {Object.keys(plan.volumeTrimmed || {}).length > 0 && (
@@ -617,7 +620,7 @@ function VolumePanel({ plan, week }) {
 }
 
 function CoachWorkspacePanel({
-  days, clientName, onClientName, revisions, onSaveRevision,
+  days, clientName, onClientName, revisions, onSaveRevision, onRestoreRevision, currentSnapshot,
   autoAdjust, onAutoAdjust, adaptation, onAddCustom, clients, onSaveClient, onLoadClient, onDeleteClient,
 }) {
   const [draft, setDraft] = useState({ day: 0, name: '', muscle: 'back', type: 'comp', sets: 3, reps: '8–12', rir: 2, tempo: '2-0-2', rest: '90 с' });
@@ -630,6 +633,7 @@ function CoachWorkspacePanel({
         <label className="tk-wide-label">Ім’я або код клієнта
           <input type="text" maxLength="120" value={clientName} onChange={(e) => onClientName(e.target.value)} placeholder="Наприклад: Клієнт А" />
         </label>
+        <p className="tk-hint">Профілі зберігаються лише на цьому пристрої в IndexedDB (або браузерному резервному сховищі). Це не зашифрована CRM: використовуй код клієнта замість чутливих даних і регулярно експортуй резервну копію.</p>
         <div className="tk-client-actions">
           <button type="button" className="tk-mini" disabled={!clientName.trim()} onClick={onSaveClient}>Зберегти профіль клієнта</button>
           {clients.map((client) => (
@@ -663,7 +667,18 @@ function CoachWorkspacePanel({
           <button type="button" className="tk-mini" onClick={() => { onSaveRevision(revisionNote); setRevisionNote(''); }}>Зберегти ревізію</button>
         </div>
         {revisions.length ? (
-          <ul className="tk-revisions">{revisions.slice(-6).reverse().map((revision, index) => <li key={revision.at + index}><b>{new Date(revision.at).toLocaleDateString('uk-UA')}</b> {revision.summary}</li>)}</ul>
+          <ul className="tk-revisions">{revisions.slice(-6).reverse().map((revision, index) => {
+            const changes = revision.snapshot ? diffProgramSnapshots(revision.snapshot, currentSnapshot) : [];
+            return <li key={revision.id || revision.at + index}>
+              <b>{new Date(revision.at).toLocaleDateString('uk-UA')}</b> {revision.summary}
+              {revision.snapshot ? <>
+                <div><button type="button" className="tk-mini" onClick={() => onRestoreRevision(revision)}>Відновити цю версію</button></div>
+                <details><summary>Точна різниця ({changes.length})</summary>
+                  {changes.length ? <ul>{changes.slice(0, 30).map((change) => <li key={change.path}><code>{change.path}</code>: {change.before} → {change.after}</li>)}</ul> : <p>Ця версія збігається з поточною.</p>}
+                </details>
+              </> : <small> Старий запис без знімка — відкат недоступний.</small>}
+            </li>;
+          })}</ul>
         ) : <p className="tk-hint">Ревізій ще немає. Згенерована або вручну зафіксована зміна з’явиться тут.</p>}
       </div>
     </details>
@@ -704,6 +719,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
   const [clientName, setClientName] = useState('');
   const [clients, setClients] = useState([]);
   const [autoAdjust, setAutoAdjust] = useState(true);
+  const [pendingAdaptation, setPendingAdaptation] = useState(null);
   const [screeningRequired, setScreeningRequired] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [plan, setPlan] = useState(null);
@@ -715,6 +731,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
   const toastTimer = useRef(null);
   const importRef = useRef(null);
   const initialLoadRef = useRef(false);
+  const storageErrorRef = useRef(false);
   const set = (patch) => setProfile((s) => ({ ...s, ...patch }));
   const showToast = (message, type = 'ok') => {
     setToast({ message, type });
@@ -734,6 +751,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
     setClientName(includeJournal && typeof raw.clientName === 'string' ? raw.clientName.slice(0, 120) : '');
     setClients(includeJournal ? sanitizeClientProfiles(raw.clients) : []);
     setAutoAdjust(raw.autoAdjust !== false);
+    setPendingAdaptation(cleanPendingAdaptation(raw.pendingAdaptation));
     setScreeningRequired(requireScreening && raw.built !== false);
     setPlan(requireScreening || raw.built === false ? null : buildPlan(safe));
     setWk(0);
@@ -745,17 +763,21 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
       const prof = p || profile;
       setPlan(buildPlan(prof));
       setScreeningRequired(false);
+      setPendingAdaptation(null);
+      const revisionAt = new Date().toISOString();
       setProgramRevisions((current) => [...current, {
-        at: new Date().toISOString(),
+        at: revisionAt,
+        id: 'revision-' + revisionAt,
         summary: screeningRequired ? 'Імпортований план допущено після нового скринінгу' : 'Створено нову версію програми',
-      }].slice(-100));
+        snapshot: makeProgramSnapshot({ profile: prof, anchors, swaps: {}, coachEdits }),
+      }].slice(-30));
       setWk(0); setDay(0); setSwaps({}); setBuildErr(null);
     } catch (e) { setBuildErr(e.message || String(e)); }
   };
   const variant = () => {
     try {
       const prof = { ...profile, seed: (profile.seed || 0) + 1 };
-      setProfile(prof); setPlan(buildPlan(prof)); setSwaps({}); setBuildErr(null);
+      setProfile(prof); setPlan(buildPlan(prof)); setSwaps({}); setPendingAdaptation(null); setBuildErr(null);
     } catch (e) { setBuildErr(e.message || String(e)); }
   };
   const setFatigue = (v) => {
@@ -812,11 +834,16 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
           clientName,
           clients: sanitizeClientProfiles(clients),
           autoAdjust,
+          pendingAdaptation: cleanPendingAdaptation(pendingAdaptation),
           built: !!plan,
         }));
-      } catch (e) {}
+        storageErrorRef.current = false;
+      } catch (e) {
+        if (!storageErrorRef.current) showToast('Не вдалося зберегти дані на пристрої. Експортуй резервну копію та перевір вільне місце браузера.', 'bad');
+        storageErrorRef.current = true;
+      }
     })();
-  }, [profile, anchors, swaps, journal, sessionHistory, coachEdits, programRevisions, clientName, clients, autoAdjust, plan, loaded]);
+  }, [profile, anchors, swaps, journal, sessionHistory, coachEdits, programRevisions, clientName, clients, autoAdjust, pendingAdaptation, plan, loaded]);
   const reset = async () => {
     if ((Object.keys(journal).length || sessionHistory.length) && !window.confirm('Скинути профіль, поточний журнал та всю історію? Перед цим можна зберегти резервну копію.')) return;
     try { await storage.delete(STATE_KEY); } catch (e) {}
@@ -828,6 +855,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
     setProgramRevisions([]);
     setClientName('');
     setClients([]);
+    setPendingAdaptation(null);
     setScreeningRequired(false);
     setPlan(null);
   };
@@ -856,6 +884,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
       else {
         const edit = { ...(prescriptions[key] || {}) };
         if (raw === '') delete edit[field];
+        else if (['fixedSets', 'fixedLoad'].includes(field)) edit[field] = !!raw;
         else if (['sets', 'rir', 'load'].includes(field)) {
           const value = Number(raw);
           if (Number.isFinite(value) && value >= 0) edit[field] = value;
@@ -866,26 +895,40 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
       return sanitizeCoachEdits({ ...current, prescriptions });
     });
   };
+  const saveSnapshotRevision = (summary, nextCoachEdits = coachEdits) => {
+    const at = new Date().toISOString();
+    const revision = {
+      id: 'revision-' + at,
+      at,
+      summary: String(summary || 'Ручне коригування призначень').trim().slice(0, 240),
+      snapshot: makeProgramSnapshot({ profile, anchors, swaps, coachEdits: nextCoachEdits }),
+    };
+    setProgramRevisions((current) => cleanRevisions([...current, revision]));
+  };
   const addCustomExercise = (draft) => {
-    const id = 'custom-' + Date.now().toString(36);
-    setCoachEdits((current) => sanitizeCoachEdits({
-      ...current,
-      customExercises: [...current.customExercises, { ...draft, id }],
-    }));
-    setProgramRevisions((current) => [...current, { at: new Date().toISOString(), summary: 'Додано власну вправу: ' + draft.name }].slice(-100));
+    const id = 'custom-' + new Date().toISOString().replace(/\D/gu, '');
+    const next = sanitizeCoachEdits({
+      ...coachEdits,
+      customExercises: [...coachEdits.customExercises, { ...draft, id }],
+    });
+    setCoachEdits(next);
+    saveSnapshotRevision('Додано власну вправу: ' + draft.name, next);
   };
   const removeCustomExercise = (exerciseId) => {
-    setCoachEdits((current) => sanitizeCoachEdits({
-      prescriptions: Object.fromEntries(Object.entries(current.prescriptions).filter(([key]) => !key.endsWith(':' + exerciseId))),
-      customExercises: current.customExercises.filter((exercise) => exercise.id !== exerciseId),
-    }));
+    const exercise = coachEdits.customExercises.find((item) => item.id === exerciseId);
+    const next = sanitizeCoachEdits({
+      prescriptions: Object.fromEntries(Object.entries(coachEdits.prescriptions).filter(([key]) => !key.endsWith(':' + exerciseId))),
+      customExercises: coachEdits.customExercises.filter((item) => item.id !== exerciseId),
+    });
+    setCoachEdits(next);
+    saveSnapshotRevision('Видалено власну вправу: ' + (exercise?.name || exerciseId), next);
   };
   const saveClientProfile = () => {
     const name = clientName.trim();
     if (!name) return;
     const state = makeBackupPayload({
       profile, anchors, swaps, coachEdits, journal, history: sessionHistory,
-      revisions: programRevisions, clientName: name, autoAdjust, built: !!plan,
+      revisions: programRevisions, clientName: name, autoAdjust, pendingAdaptation, built: !!plan,
     });
     setClients((current) => {
       const existing = current.find((client) => client.name.toLocaleLowerCase('uk-UA') === name.toLocaleLowerCase('uk-UA'));
@@ -909,13 +952,27 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
     showToast('Профіль клієнта видалено');
   };
   const saveRevision = (summary) => {
-    const clean = String(summary || 'Ручне коригування призначень').trim().slice(0, 240);
-    setProgramRevisions((current) => [...current, { at: new Date().toISOString(), summary: clean }].slice(-100));
-    showToast('Ревізію програми збережено');
+    saveSnapshotRevision(summary);
+    showToast('Ревізію програми зі знімком збережено');
+  };
+  const restoreRevision = (revision) => {
+    if (!revision?.snapshot || !window.confirm('Відновити цю версію програми? Поточний журнал тренувань залишиться без змін.')) return;
+    const safe = sanitizeProfile(revision.snapshot.profile);
+    setProfile(safe);
+    setAnchors(cleanAnchors(revision.snapshot.anchors));
+    setSwaps(hydrateSwaps(revision.snapshot.swaps, EX));
+    setCoachEdits(sanitizeCoachEdits(revision.snapshot.coachEdits));
+    setPlan(buildPlan(safe));
+    setWk(0);
+    setDay(0);
+    setPendingAdaptation(null);
+    showToast('Версію програми відновлено');
   };
   const deleteSession = (id) => {
     if (!window.confirm('Видалити цей завершений запис? Дію неможливо скасувати без резервної копії.')) return;
+    const removed = sessionHistory.find((session) => session.id === id);
     setSessionHistory((current) => current.filter((session) => session.id !== id));
+    if (removed) updateLog(`session:${removed.week - 1}:${removed.day - 1}`, 'done', false);
     showToast('Помилковий запис видалено');
   };
   const updateLog = (key, field, raw) => {
@@ -964,7 +1021,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
   const exportBackup = () => {
     try {
       const stamp = new Date().toISOString().slice(0, 10);
-      downloadJson(`gym-program-backup-${stamp}.json`, makeBackupPayload({ profile, anchors, swaps, coachEdits, journal, history: sessionHistory, revisions: programRevisions, clientName, clients, autoAdjust, built: !!plan }));
+      downloadJson(`gym-program-backup-${stamp}.json`, makeBackupPayload({ profile, anchors, swaps, coachEdits, journal, history: sessionHistory, revisions: programRevisions, clientName, clients, autoAdjust, pendingAdaptation, built: !!plan }));
       showToast('Резервну копію збережено');
     } catch (e) { showToast('Не вдалося створити резервну копію', 'bad'); }
   };
@@ -981,13 +1038,23 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
     }
   };
 
-  const adaptation = useMemo(() => trainingAdaptation(sessionHistory), [sessionHistory]);
+  const adaptation = useMemo(() => {
+    if (!autoAdjust) return { level: 'normal', message: 'Автоматичну корекцію вимкнено.' };
+    if (!pendingAdaptation) return { level: 'normal', message: 'Одноразову корекцію наступної сесії не заплановано.' };
+    return {
+      ...pendingAdaptation.decision,
+      message: `Тиждень ${pendingAdaptation.week + 1}, день ${pendingAdaptation.day + 1}: ${pendingAdaptation.decision.message}`,
+    };
+  }, [autoAdjust, pendingAdaptation]);
   const view = useMemo(() => {
     if (!plan) return null;
     const edited = applyCoachEdits(plan, coachEdits);
-    const swapped = applySwapsToPlan(edited, swaps);
-    return { ...swapped, adaptation: autoAdjust ? adaptation : undefined };
-  }, [plan, swaps, coachEdits, autoAdjust, adaptation]);
+    return applySwapsToPlan(edited, swaps);
+  }, [plan, swaps, coachEdits]);
+  const currentSnapshot = useMemo(
+    () => makeProgramSnapshot({ profile, anchors, swaps, coachEdits }),
+    [profile, anchors, swaps, coachEdits],
+  );
 
   const [exporting, setExporting] = useState(false);
   const exportXlsx = async () => {
@@ -1030,7 +1097,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
       const vol = [['Група', 'Підходи на піку', 'Стеля', 'Частота/тиж']];
       const peak = weeks.reduce((a, b) => (a.mult > b.mult ? a : b));
       const vv = weeklyVolume(view, peak).byMuscle, fr = frequency(view);
-      Object.keys(MUSCLE).forEach((k) => vol.push([MUSCLE[k], Math.round(vv[k] || 0), targetFor(profile.level, k, view.flags.teen, profile.sex)[1], fr[k] || 0]));
+      Object.keys(MUSCLE).forEach((k) => vol.push([MUSCLE[k], Math.round(vv[k] || 0), targetFor(profile.level, k, view.flags.teen, profile.sex, profile.goal)[1], fr[k] || 0]));
       addSheet('Обсяг', vol);
 
       const buf = await wb.xlsx.writeBuffer();
@@ -1079,10 +1146,12 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
 
   const weeks = view.weeks;
   const week = weeks[Math.min(wk, weeks.length - 1)];
-  const marks = techMarks(view.days[day], week, view);
+  const appliesHere = autoAdjust && pendingAdaptation?.week === wk && pendingAdaptation?.day === day;
+  const sessionPlan = appliesHere ? { ...view, adaptation: pendingAdaptation.decision } : view;
+  const marks = techMarks(view.days[day], week, sessionPlan);
   const warm = warmup(view, view.days[day]);
   const alerts = scheduleWarnings(view);
-  const mins = sessionMinutes(view.days[day], week, view, day);
+  const mins = sessionMinutes(view.days[day], week, sessionPlan, day);
   const dayLabelFor = (i) => (profile.weekdays.length === profile.days ? WEEKDAYS[profile.weekdays[i]] + ' · ' : (i + 1) + '. ');
 
   const copy = async () => {
@@ -1104,6 +1173,10 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
   const sessionKey = `session:${wk}:${day}`;
   const sessionLog = journal[sessionKey] || {};
   const completeSession = () => {
+    if (sessionLog.done) {
+      showToast('Цю сесію вже збережено. Видали помилковий запис в історії, якщо потрібно записати її заново.', 'bad');
+      return;
+    }
     const exercises = view.days[day].items.map((item) => {
       const log = journal[journalKey(wk, day, item.ex.id)] || {};
       const sets = Array.isArray(log.sets) ? log.sets.filter((set) => Object.keys(set).length) : [];
@@ -1132,7 +1205,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
       exercises,
       volume: snapshotVolume(exercises),
       completedSets,
-      plannedSets: view.days[day].items.reduce((sum, item, index) => sum + setsFor(item, week, view, isHeavy(day, index, week, view)), 0),
+      plannedSets: view.days[day].items.reduce((sum, item, index) => sum + setsFor(item, week, sessionPlan, isHeavy(day, index, week, sessionPlan)), 0),
       ...(sessionLog.readiness == null ? {} : { readiness: sessionLog.readiness }),
       ...(sessionLog.sessionRpe == null ? {} : { sessionRpe: sessionLog.sessionRpe }),
       ...(sessionLog.note ? { note: sessionLog.note } : {}),
@@ -1148,8 +1221,14 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
       });
       return next;
     });
+    const decision = trainingAdaptation([...sessionHistory, snapshot]);
+    if (autoAdjust && decision.level !== 'normal') {
+      const nextDay = (day + 1) % view.days.length;
+      const nextWeek = nextDay === 0 ? (wk + 1) % weeks.length : wk;
+      setPendingAdaptation({ week: nextWeek, day: nextDay, sourceId: snapshot.id, decision });
+    } else setPendingAdaptation(null);
     updateLog(sessionKey, 'done', true);
-    showToast('Сесію додано до історії');
+    showToast('Сесію додано до історії' + (decision.level !== 'normal' && autoAdjust ? '; наступну сесію одноразово полегшено' : ''));
   };
 
   return (
@@ -1200,13 +1279,20 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
 
         <ReadingGuide />
 
+        {appliesHere && (
+          <div className={'tk-alert tk-adaptation ' + pendingAdaptation.decision.level}><b>Одноразова корекція цієї сесії</b>
+            Підходи ×{pendingAdaptation.decision.setFactor}; планова вага ×{pendingAdaptation.decision.loadFactor}. Решта плану й експорт не змінені.
+          </div>
+        )}
+
         <CoachWorkspacePanel days={view.days} clientName={clientName} onClientName={setClientName}
-          revisions={programRevisions} onSaveRevision={saveRevision} autoAdjust={autoAdjust} onAutoAdjust={setAutoAdjust}
+          revisions={programRevisions} onSaveRevision={saveRevision} onRestoreRevision={restoreRevision} currentSnapshot={currentSnapshot}
+          autoAdjust={autoAdjust} onAutoAdjust={(value) => { setAutoAdjust(value); if (!value) setPendingAdaptation(null); }}
           adaptation={adaptation} onAddCustom={addCustomExercise} clients={clients}
           onSaveClient={saveClientProfile} onLoadClient={loadClientProfile} onDeleteClient={deleteClientProfile} />
 
         <ProgressDashboard history={sessionHistory} onDelete={deleteSession}
-          plannedSets={view.days[day].items.reduce((sum, item, index) => sum + setsFor(item, week, view, isHeavy(day, index, week, view)), 0)} />
+          plannedSets={view.days[day].items.reduce((sum, item, index) => sum + setsFor(item, week, sessionPlan, isHeavy(day, index, week, sessionPlan)), 0)} plannedSessionsPerWeek={profile.days} />
 
         {profile.goal === 'health' && (
           <HealthPlanPanel profile={profile} weekIndex={wk} log={journal[healthWeekKey(wk)] || {}} onChange={(field, value) => updateLog(healthWeekKey(wk), field, value)} />
@@ -1277,7 +1363,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
           {view.days[day].items.map((it, i) => {
             const key = journalKey(wk, day, it.ex.id);
             return (
-              <ExRow key={it.ex.id} item={it} idx={i} week={week} plan={view}
+              <ExRow key={it.ex.id} item={it} idx={i} week={week} plan={sessionPlan}
                 heavy={isHeavy(day, i, week, view)} tech={marks.has(i)}
                 anchors={anchors} onAnchor={updateAnchor}
                 log={journal[key] || {}} onLog={(field, value) => updateLog(key, field, value)}
@@ -1286,8 +1372,8 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
                 onSwap={(ex) => setSwaps((s) => ({ ...s, [day + ':' + plan.days[day].items[i].ex.id]: ex }))} />
             );
           })}
-          <button className="tk-cta" style={{ marginTop: 14 }} onClick={completeSession}>
-            Завершити та зберегти сесію
+          <button className="tk-cta" style={{ marginTop: 14 }} onClick={completeSession} disabled={!!sessionLog.done}>
+            {sessionLog.done ? 'Сесію вже збережено' : 'Завершити та зберегти сесію'}
           </button>
         </div>
 
@@ -1296,7 +1382,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
             <div className="tk-eyebrow">Протокол тесту</div>
             <p className="tk-p" style={{ marginBottom: 10 }}>Тестуються лише рухи, позначені важким блоком — по одному на день. Решта сесії йде як звичайно, але після тесту.</p>
             <div className="tk-rule"><b>Схема виходу</b>Розминка → 5 повторів на 50 % → 3 на 70 % → 1 на 85 % → цільова спроба на 3–6 повторів. Між підвідними 2 хв, перед цільовою — 4 хв.</div>
-            <div className="tk-rule"><b>Критерій успіху</b>Тягові рухи мають перевищити фінал попереднього блоку на 2.5–5 %. Жимові — повернути або перевищити попередній максимум у робочому діапазоні. Якщо не вийшло — це сигнал не про волю, а про те, що обсяг або відновлення були недостатні.</div>
+            <div className="tk-rule"><b>Критерій успіху</b>Тягові рухи мають перевищити фінал попереднього блоку на 2.5–5 %. Жимові — повернути або перевищити попередній максимум у робочому діапазоні. Якщо не вийшло — це лише сигнал переглянути дані: техніку, специфічність тесту, навантаження, обсяг, сон, харчування й випадкову варіативність. Один тест не встановлює причину.</div>
             <div className="tk-rule"><b>Чого не робити</b>Не тестувати всі рухи в один день і не йти в сингли: одне повторення на максимум після трьох тижнів RIR 0–1 дає ризик, непропорційний інформації, яку воно приносить.</div>
           </div>
         )}

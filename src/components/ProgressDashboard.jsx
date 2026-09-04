@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { exerciseRecords } from '../coachTools.ts';
-import { historySummary } from '../journalAnalytics.ts';
+import { attendanceSummary, historySummary } from '../journalAnalytics.ts';
 
 const formatDate = (value) => {
   try { return new Intl.DateTimeFormat('uk-UA', { day: '2-digit', month: '2-digit' }).format(new Date(value)); }
   catch { return '—'; }
 };
 
-export default function ProgressDashboard({ history = [], plannedSets = 0, onDelete = () => {} }) {
+export default function ProgressDashboard({ history = [], plannedSets = 0, plannedSessionsPerWeek = 0, onDelete = () => {} }) {
   const summary = historySummary(history);
   const [referenceTime] = useState(() => Date.now());
   if (!summary.sessions) {
@@ -22,9 +22,8 @@ export default function ProgressDashboard({ history = [], plannedSets = 0, onDel
     );
   }
 
-  const records = exerciseRecords(history).slice(0, 6);
-  const fourWeeksAgo = referenceTime - 28 * 24 * 60 * 60 * 1000;
-  const attendance = history.filter((session) => new Date(session.completedAt).getTime() >= fourWeeksAgo).length;
+  const records = exerciseRecords(history);
+  const attendance = attendanceSummary(history, plannedSessionsPerWeek, referenceTime);
   const latest = summary.recent.at(-1);
   const recentActual = latest?.completedSets || 0;
   const recentPlanned = latest?.plannedSets || plannedSets;
@@ -37,7 +36,7 @@ export default function ProgressDashboard({ history = [], plannedSets = 0, onDel
         <div><b>{summary.averageRpe ?? '—'}</b><span>середній session-RPE</span></div>
         <div><b>{summary.averageReadiness ?? '—'}</b><span>середня готовність</span></div>
         <div><b>{summary.totalSets}</b><span>підходів за 12 сесій</span></div>
-        <div><b>{attendance}</b><span>відвідувань за 28 днів</span></div>
+        <div><b>{attendance.percent == null ? '—' : attendance.percent + ' %'}</b><span>виконання плану за 28 днів · {attendance.completed}/{attendance.planned || '—'}</span></div>
       </div>
       {recentPlanned > 0 && (
         <p className="tk-plan-fact"><b>План / факт останньої сесії:</b> {recentPlanned} / {recentActual} підходів</p>

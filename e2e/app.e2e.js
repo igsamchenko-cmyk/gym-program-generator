@@ -38,6 +38,8 @@ test('зберігає завершену сесію та показує її в
   await page.getByRole('button', { name: 'Завершити та зберегти сесію' }).click();
   await expect(page.getByRole('heading', { name: '1 завершених тренувань' })).toBeVisible();
   await expect(page.getByText('Сесію додано до історії')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Сесію вже збережено' })).toBeDisabled();
+  await expect(page.getByRole('heading', { name: '1 завершених тренувань' })).toBeVisible();
 });
 
 test('спільне посилання не обходить особистий скринінг', async ({ page }) => {
@@ -63,6 +65,29 @@ test('тренер може додати власну вправу і редаг
   await expect(page.locator('.tk-exname').filter({ hasText: 'Контрольна тяга тренера' })).toBeVisible();
   await page.getByRole('button', { name: 'Редагувати призначення' }).first().click();
   await expect(page.getByText('Скинути ручні правки')).toBeVisible();
+  await expect(page.getByText('Фіксувати підходи в усі тижні')).toHaveCount(0);
+  await page.getByLabel('Базові підходи').first().fill('4');
+  await expect(page.getByText('Фіксувати підходи в усі тижні')).toBeVisible();
+  await expect(page.getByText(/Точна різниця/).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Відновити цю версію' }).first()).toBeVisible();
+});
+
+
+test('зберігає стан у IndexedDB і відновлює після перезавантаження', async ({ page }) => {
+  await completeScreening(page);
+  await page.getByRole('button', { name: 'Скласти програму' }).click();
+  await expect.poll(async () => page.evaluate(() => new Promise((resolve) => {
+    const request = indexedDB.open('training-constructor');
+    request.onsuccess = () => {
+      const transaction = request.result.transaction('key-value', 'readonly');
+      const read = transaction.objectStore('key-value').get('tk-state');
+      read.onsuccess = () => resolve(typeof read.result === 'string' && read.result.includes('"version":6'));
+      read.onerror = () => resolve(false);
+    };
+    request.onerror = () => resolve(false);
+  }))).toBe(true);
+  await page.reload();
+  await expect(page.getByText('Тренувальний блок · висота стовпчика = обсяг тижня')).toBeVisible();
 });
 async function expectNoSeriousA11yIssues(page) {
   const results = await new AxeBuilder({ page }).analyze();

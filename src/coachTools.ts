@@ -5,6 +5,8 @@ export type PrescriptionEdit = {
   tempo?: string;
   rest?: string;
   load?: number;
+  fixedSets?: boolean;
+  fixedLoad?: boolean;
 };
 
 export type CustomExercise = PrescriptionEdit & {
@@ -36,6 +38,8 @@ export function sanitizeCoachEdits(value: unknown): CoachEdits {
     if (sets !== undefined) clean.sets = Math.round(sets);
     if (rir !== undefined) clean.rir = Math.round(rir);
     if (load !== undefined) clean.load = load;
+    if (item.fixedSets === true) clean.fixedSets = true;
+    if (item.fixedLoad === true) clean.fixedLoad = true;
     if (typeof item.reps === 'string' && /^\d{1,3}(?:[–-]\d{1,3}|\s*с)?$/u.test(item.reps.trim())) clean.reps = item.reps.trim().replace('-', '–');
     if (typeof item.tempo === 'string' && /^(?:\d|X|—)-(?:\d|X|—)-(?:\d|X|—)$/iu.test(item.tempo.trim())) clean.tempo = item.tempo.trim().toUpperCase();
     if (typeof item.rest === 'string' && item.rest.trim()) clean.rest = item.rest.trim().slice(0, 40);
@@ -129,5 +133,7 @@ export function exerciseRecords(history: any[] = []) {
     const current = records.get(exercise.exerciseId);
     if (!current || e1rm > current.e1rm) records.set(exercise.exerciseId, { name: exercise.name, e1rm, weight, reps, at: session.completedAt });
   })));
-  return [...records.values()].sort((a, b) => b.e1rm - a.e1rm);
+  // e1RM має сенс порівнювати в межах тієї самої вправи, а не ранжувати
+  // жим ногами проти згинання рук. Список нейтрально впорядковано за назвою.
+  return [...records.values()].sort((a, b) => a.name.localeCompare(b.name, 'uk-UA'));
 }

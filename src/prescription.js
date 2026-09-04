@@ -33,7 +33,8 @@ function estimated1RM(raw) {
 }
 function loadFor(item, week, heavy, anchors, plan) {
   if (Number(item.coach?.load) > 0) {
-    return round2(Number(item.coach.load) * (plan?.adaptation?.loadFactor || 1));
+    const periodFactor = item.coach.fixedLoad ? 1 : week.load * (heavy ? HEAVY_LOAD : 1);
+    return round2(Number(item.coach.load) * periodFactor * (plan?.adaptation?.loadFactor || 1));
   }
   const anchor = normalizeAnchor(anchors && anchors[item.ex.id]);
   if (!anchor) return null;
@@ -69,7 +70,9 @@ function setsFor(item, week, plan, heavy) {
   if (heavy && !manual) return 2;
   const m = plan.flags.teen ? 0.8 : 1;
   const goalFactor = (GOAL_CONFIG[plan.profile.goal] || GOAL_CONFIG.hyper).setFactor;
-  let n = manual > 0 ? Math.round(manual) : Math.max(1, Math.round(item.base * week.mult * m * goalFactor));
+  let n = manual > 0
+    ? Math.max(1, Math.round(manual * (item.coach?.fixedSets ? 1 : week.mult) * m))
+    : Math.max(1, Math.round(item.base * week.mult * m * goalFactor));
   // запобіжник: обсяг зрізається з ізоляції, база не чіпається
   if (plan.profile.fatigue && item.ex.t === 'iso' && !week.deload) n = Math.max(1, n - 1);
   if (plan.adaptation?.setFactor < 1 && !week.deload) n = Math.max(1, Math.floor(n * plan.adaptation.setFactor));

@@ -83,6 +83,16 @@ export function sanitizeHistory(value: unknown): SessionSnapshot[] {
   });
 }
 
+export function attendanceSummary(history: SessionSnapshot[] = [], plannedSessionsPerWeek = 0, now = Date.now()) {
+  const since = now - 28 * 24 * 60 * 60 * 1000;
+  const completed = sanitizeHistory(history).filter((session) => {
+    const timestamp = new Date(session.completedAt).getTime();
+    return Number.isFinite(timestamp) && timestamp >= since && timestamp <= now;
+  }).length;
+  const planned = Math.max(0, Math.round(Number(plannedSessionsPerWeek) || 0) * 4);
+  return { completed, planned, percent: planned ? Math.min(100, Math.round(completed / planned * 100)) : null };
+}
+
 export function historySummary(history: SessionSnapshot[] = []) {
   const safeHistory = sanitizeHistory(history);
   const recent = safeHistory.slice(-12);
