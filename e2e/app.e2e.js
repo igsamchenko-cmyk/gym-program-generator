@@ -23,10 +23,12 @@ test('вимагає обрати тривалість перед генерац
 });
 
 test('створює програму після завершення скринінгу', async ({ page }) => {
-  await expect(page.getByRole('heading', { name: 'Розкажи про себе' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Параметри клієнта' })).toBeVisible();
   await completeScreening(page);
   await page.getByRole('button', { name: 'Скласти програму' }).click();
   await expect(page.getByText('Тренувальний блок · висота стовпчика = обсяг тижня')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Прогрес з’явиться після завершення сесії/ })).toBeHidden();
+  await page.getByRole('button', { name: 'Відкрити журнал', exact: true }).click();
   await expect(page.getByRole('heading', { name: /Прогрес з’явиться після завершення сесії/ })).toBeVisible();
 });
 
@@ -36,12 +38,15 @@ test('режим здоров’я містить повний тижневий 
   await page.getByRole('button', { name: 'Скласти програму' }).click();
   await expect(page.getByRole('heading', { name: 'Сила, аеробна активність, баланс і рухливість' })).toBeVisible();
   await expect(page.getByText('150–300 хв помірної або 75–150 хв високої інтенсивності')).toBeVisible();
+  await expect(page.getByLabel('Помірна активність, хв')).toBeHidden();
+  await page.getByRole('button', { name: 'Відкрити журнал', exact: true }).click();
   await expect(page.getByLabel('Помірна активність, хв')).toBeVisible();
 });
 
 test('зберігає завершену сесію та показує її в трендах', async ({ page }) => {
   await completeScreening(page);
   await page.getByRole('button', { name: 'Скласти програму' }).click();
+  await page.getByRole('button', { name: 'Відкрити журнал', exact: true }).click();
   await page.getByLabel('повт.').first().fill('8');
   await page.getByRole('button', { name: 'Завершити та зберегти сесію' }).click();
   await expect(page.getByRole('heading', { name: '1 завершених тренувань' })).toBeVisible();
@@ -53,10 +58,11 @@ test('зберігає завершену сесію та показує її в
 test('прив’язує корекцію до фактично розпочатої сесії та скасовує з джерелом', async ({ page }) => {
   await completeScreening(page);
   await page.getByRole('button', { name: 'Скласти програму' }).click();
+  await page.getByRole('button', { name: 'Відкрити журнал', exact: true }).click();
   await page.getByLabel('Готовність до сесії 1–5').fill('2');
   await page.getByLabel('повт.').first().fill('8');
   await page.getByRole('button', { name: 'Завершити та зберегти сесію' }).click();
-  await page.getByText('Робоче місце тренера').click();
+  await page.getByText('Корекція навантаження за журналом', { exact: true }).click();
   await expect(page.getByText(/Очікує першої фактично розпочатої/)).toBeVisible();
 
   await page.locator('.tk-day').nth(1).click();
@@ -84,10 +90,10 @@ test('спільне посилання не обходить особистий
 test('тренер може додати власну вправу і редагувати призначення', async ({ page }) => {
   await completeScreening(page);
   await page.getByRole('button', { name: 'Скласти програму' }).click();
-  await page.getByText('Робоче місце тренера').click();
   await page.getByLabel('Ім’я або код клієнта').fill('Клієнт А');
   await page.getByRole('button', { name: 'Зберегти профіль клієнта' }).click();
   await expect(page.getByRole('button', { name: 'Клієнт А', exact: true })).toBeVisible();
+  await page.getByText('Додати власну вправу', { exact: true }).click();
   await page.getByLabel('Назва').fill('Контрольна тяга тренера');
   await page.getByRole('button', { name: 'Додати до програми' }).click();
   await expect(page.locator('.tk-exname').filter({ hasText: 'Контрольна тяга тренера' })).toBeVisible();
@@ -97,6 +103,7 @@ test('тренер може додати власну вправу і редаг
   await page.getByLabel('Базові підходи').first().fill('4');
   await expect(page.getByText('Фіксувати підходи в усі тижні')).toBeVisible();
   await expect(page.getByLabel('Крок доступної ваги, кг').first()).toBeVisible();
+  await page.getByText('Історія змін програми', { exact: true }).click();
   await expect(page.getByText(/Точна різниця/).first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Відновити цю версію' }).first()).toBeVisible();
 });
@@ -136,4 +143,24 @@ test('мобільний екран не має горизонтального �
   await page.getByRole('button', { name: 'Скласти програму' }).click();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(1);
+});
+
+test('інструктор експортує програму без відкриття або заповнення журналу', async ({ page }, testInfo) => {
+  await completeScreening(page);
+  await page.getByRole('button', { name: 'Скласти програму', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Відкрити журнал', exact: true })).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('.tk-exercise-log')).toHaveCount(0);
+  const exerciseName = (await page.locator('.tk-exname').first().innerText()).trim();
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Експорт у Excel', exact: true }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/\.xlsx$/);
+  await download.saveAs(testInfo.outputPath('instructor-program.xlsx'));
+  const { default: ExcelJS } = await import('exceljs');
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(testInfo.outputPath('instructor-program.xlsx'));
+  const rows = [];
+  workbook.worksheets.forEach((sheet) => sheet.eachRow((row) => rows.push(row.values)));
+  expect(JSON.stringify(rows)).toContain(exerciseName);
+  await expect(page.locator('.tk-exercise-log')).toHaveCount(0);
 });

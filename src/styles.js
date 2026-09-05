@@ -306,6 +306,24 @@ export const CSS = `
  .tk-revision-add input{min-width:0;width:100%;}
 }
 
+
+.tk-journal-toggle{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:16px 20px;}
+.tk-journal-toggle strong{font-size:14px;}
+.tk-journal-toggle p{font-size:13px;color:var(--steel);margin:4px 0 0;}
+.tk-journal-toggle button{flex-shrink:0;}
+.tk-edit-action,.tk-edit-action:hover,.tk-edit-action[aria-expanded="true"]{background:var(--deep);border-color:var(--deep);color:#fff;}
+.tk-planned-load{display:flex;align-items:baseline;flex-wrap:wrap;gap:12px;padding:10px 12px;margin:12px 0;border:1px solid var(--line);border-radius:8px;background:var(--surf);}
+.tk-planned-load span{font-size:12px;color:var(--steel);}
+.tk-planned-load strong{font-size:20px;font-variant-numeric:tabular-nums;}
+.tk-anchor-settings{flex-basis:100%;min-width:0;border-top:1px solid var(--line);padding-top:10px;}
+.tk-anchor-settings summary,.tk-coach-section summary,.tk-plan-adjustments summary{cursor:pointer;font-size:13px;font-weight:600;padding:10px 0;}
+.tk-coach-editor .tk-anchor-settings .tk-logfield input{width:100%;}
+.tk-coach-editor .tk-anchor-settings .tk-logfield{font-size:12px;}
+.tk-coach-section{border-top:1px solid var(--line);padding:2px 0;}
+.tk-coach-section[open]{padding-bottom:12px;}
+.tk-plan-adjustments{border-top:1px solid var(--line);margin-top:12px;}
+@media (max-width:680px){.tk-journal-toggle{flex-direction:column;align-items:stretch;gap:12px;}.tk-coach-workspace>summary{flex-wrap:wrap;gap:4px;}}
+
 @media (max-width:760px){.tk{background-position:left top;background-size:auto 100vh;background-attachment:scroll;}.tk::before{width:100vw;opacity:var(--center-mobile-opacity);mask-image:none;-webkit-mask-image:none;background-position:center top;}.tk-bar{background:var(--bar-mobile);backdrop-filter:none;-webkit-backdrop-filter:none}.tk-card,.tk-card-dense{background:var(--card-mobile);backdrop-filter:none;-webkit-backdrop-filter:none}}
 @media (prefers-reduced-transparency:reduce){.tk-bar{background:var(--bar);backdrop-filter:none;-webkit-backdrop-filter:none}.tk-card,.tk-card-dense{background:var(--card);backdrop-filter:none;-webkit-backdrop-filter:none}}
 @media (max-width:520px){.tk-volrow{grid-template-columns:92px 1fr 52px;}.tk-ramp{height:92px;}.tk-credit{right:8px;bottom:8px;padding:6px 9px;}.tk-credit strong{font-size:12px;} .tk-warm-notes,.tk-home-kit-grid,.tk-reading-grid,.tk-health-grid,.tk-aerobic-grid,.tk-stat-grid,.tk-records{grid-template-columns:1fr;}.tk-progress-list>div{grid-template-columns:1fr;gap:4px;}.tk-home-grid{grid-template-columns:1fr;}.tk-reading summary{padding:14px;}.tk-reading-body{padding:12px 14px 15px;}.tk-logfield{flex:1;min-width:64px}.tk-logfield input{width:100%;}.tk-toast{bottom:58px;}}
