@@ -22,6 +22,8 @@ for (const theme of ['dark', 'light']) {
     await page.getByRole('button', { name: 'Скласти програму', exact: true }).click();
     const exercise = page.locator('.tk-ex').first();
     await expect(page.getByRole('heading', { name: 'Тренувальна програма', exact: true })).toBeVisible();
+    await expect(page.getByLabel('Ім’я або код клієнта')).toBeHidden();
+    await page.getByText('Робоче місце тренера', { exact: true }).click();
     await expect(page.getByLabel('Ім’я або код клієнта')).toBeVisible();
     await expect(page.getByText('Програма готова', { exact: true })).toBeVisible();
     await page.locator('.tk-action-menu > summary').click();

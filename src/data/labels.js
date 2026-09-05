@@ -55,7 +55,7 @@ const LIMIT_LABEL = { knee: 'коліна', lowback: 'поперек', shoulder:
 const LEVEL_LABEL = { beg: 'Новачок', int: 'Середній', adv: 'Просунутий' };
 
 
-const GOAL_LABEL = { hyper: 'Гіпертрофія', strength: 'Сила', fatloss: 'Зниження ваги', health: 'Здоров’я' };
+const GOAL_LABEL = { hyper: 'Ріст м’язів', strength: 'Сила', fatloss: 'Зниження ваги', health: 'Здоров’я' };
 
 
 const DAY_NAME = { fbA: 'Фулбоді A', fbB: 'Фулбоді B', fbC: 'Фулбоді C', upper: 'Верх тіла', lower: 'Низ тіла', push: 'Жимовий', pull: 'Тяговий', legs: 'Ноги' };

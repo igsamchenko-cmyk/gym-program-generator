@@ -15,6 +15,11 @@ test.beforeEach(async ({ page }) => {
   await page.reload();
 });
 
+test('не показує медичне попередження до відповіді на скринінг', async ({ page }) => {
+  await expect(page.getByText('Потрібна індивідуальна оцінка')).toHaveCount(0);
+  await expect(page.getByText(/Заповни всі чотири відповіді/)).toBeVisible();
+});
+
 test('вимагає обрати тривалість перед генерацією', async ({ page }) => {
   await completeScreening(page, false);
   await expect(page.getByRole('button', { name: 'Обери тривалість сесії' })).toBeDisabled();
@@ -62,6 +67,7 @@ test('прив’язує корекцію до фактично розпоча�
   await page.getByLabel('Готовність до сесії 1–5').fill('2');
   await page.getByLabel('повт.').first().fill('8');
   await page.getByRole('button', { name: 'Завершити та зберегти сесію' }).click();
+  await page.getByText('Робоче місце тренера', { exact: true }).click();
   await page.getByText('Корекція навантаження за журналом', { exact: true }).click();
   await expect(page.getByText(/Очікує першої фактично розпочатої/)).toBeVisible();
 
@@ -90,6 +96,8 @@ test('спільне посилання не обходить особистий
 test('тренер може додати власну вправу і редагувати призначення', async ({ page }) => {
   await completeScreening(page);
   await page.getByRole('button', { name: 'Скласти програму' }).click();
+  await expect(page.getByLabel('Ім’я або код клієнта')).toBeHidden();
+  await page.getByText('Робоче місце тренера', { exact: true }).click();
   await page.getByLabel('Ім’я або код клієнта').fill('Клієнт А');
   await page.getByRole('button', { name: 'Зберегти профіль клієнта' }).click();
   await expect(page.getByRole('button', { name: 'Клієнт А', exact: true })).toBeVisible();
