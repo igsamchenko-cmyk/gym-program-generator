@@ -1278,10 +1278,15 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
       <Header theme={theme} onToggle={onThemeToggle} />
       <Toast toast={toast} />
       <div className="tk-main">
-        <div className="tk-card">
-          <div className="tk-eyebrow">Конструктор для інструктора</div>
-          <h2 className="tk-h">Програма тренувань</h2>
-          <p className="tk-p">Налаштуй параметри клієнта, відредагуй вправи та передай готову програму.</p>
+        <section className="tk-card tk-program-hero" aria-labelledby="program-title">
+          <div className="tk-program-heading">
+            <div>
+              <div className="tk-eyebrow tk-eyebrow-accent"><span aria-hidden="true">✦</span> Простір інструктора</div>
+              <h2 className="tk-h tk-program-title" id="program-title">Тренувальна програма</h2>
+              <p className="tk-p tk-program-lead">Усі параметри клієнта й інструменти програми — в одному робочому просторі.</p>
+            </div>
+            <span className="tk-program-status"><i aria-hidden="true" /> Програма готова</span>
+          </div>
           <div className="tk-chips">
             {clientName && <span className="tk-chip">Клієнт: {clientName}</span>}
             <span className="tk-chip">{profile.age} р.</span>
@@ -1297,15 +1302,20 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
             {profile.priority.map((m) => <span className="tk-chip" key={m}>↑ {MUSCLE[m]}</span>)}
             {profile.avoid.map((key) => <span className="tk-chip" key={'avoid-' + key}>× {AVOID[key].label}</span>)}
           </div>
-          <div className="tk-actions">
-            <button className="tk-mini" style={{ paddingLeft: 0 }} onClick={() => setPlan(null)}>Змінити параметри</button>
-            <button className="tk-mini" onClick={copy}>Скопіювати</button>
-            <button className="tk-mini" onClick={shareProgram}>Поділитися</button>
-            <button className="tk-mini" onClick={exportBackup}>Резервна копія</button>
-            <button className="tk-mini" onClick={() => importRef.current?.click()}>Імпортувати</button>
-            <button className="tk-mini" onClick={exportXlsx} disabled={exporting}>{exporting ? 'Готую файл…' : 'Експорт у Excel'}</button>
-            <button className="tk-mini" onClick={variant}>Інший варіант</button>
-            <button className="tk-mini" onClick={reset}>Скинути все</button>
+          <div className="tk-actions" aria-label="Дії з програмою">
+            <button className="tk-action tk-action-primary" aria-label="Змінити параметри" onClick={() => setPlan(null)}><span aria-hidden="true">⚙</span> Налаштувати</button>
+            <button className="tk-action" onClick={copy}><span aria-hidden="true">▣</span> Копіювати</button>
+            <button className="tk-action" onClick={shareProgram}><span aria-hidden="true">↗</span> Поділитися</button>
+            <button className="tk-action" aria-label="Експорт у Excel" onClick={exportXlsx} disabled={exporting}><span aria-hidden="true">↓</span> {exporting ? 'Готую файл…' : 'Excel'}</button>
+            <details className="tk-action-menu">
+              <summary className="tk-action"><span aria-hidden="true">•••</span> Ще</summary>
+              <div className="tk-action-menu-panel">
+                <button type="button" onClick={variant}>Створити інший варіант</button>
+                <button type="button" onClick={exportBackup}>Зберегти резервну копію</button>
+                <button type="button" onClick={() => importRef.current?.click()}>Імпортувати дані</button>
+                <button type="button" className="tk-danger" onClick={reset}>Скинути всі дані</button>
+              </div>
+            </details>
           </div>
           <input ref={importRef} className="tk-file" aria-label="Імпорт резервної копії" type="file" accept="application/json,.json" onChange={importBackup} />
           <details className="tk-plan-adjustments"><summary>Відновлення та навантаження{profile.fatigue ? ' · запобіжник увімкнено' : ''}</summary>
@@ -1313,7 +1323,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
             <input type="checkbox" checked={profile.fatigue} onChange={(e) => setFatigue(e.target.checked)} />
             <span>Сон або енергія просіли другий тиждень поспіль — увімкнути запобіжник. Інтенсивні техніки знімаються, з ізоляції йде по одному підходу, база лишається недоторканою.</span>
           </label></details>
-        </div>
+        </section>
 
         {alerts.length > 0 && (
           <div className="tk-alert">

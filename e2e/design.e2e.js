@@ -21,8 +21,12 @@ for (const theme of ['dark', 'light']) {
     }
     await page.getByRole('button', { name: 'Скласти програму', exact: true }).click();
     const exercise = page.locator('.tk-ex').first();
-    await expect(page.getByRole('heading', { name: 'Програма тренувань', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Тренувальна програма', exact: true })).toBeVisible();
     await expect(page.getByLabel('Ім’я або код клієнта')).toBeVisible();
+    await expect(page.getByText('Програма готова', { exact: true })).toBeVisible();
+    await page.locator('.tk-action-menu > summary').click();
+    await expect(page.getByRole('button', { name: 'Створити інший варіант', exact: true })).toBeVisible();
+    await page.locator('.tk-action-menu > summary').click();
     await expect(exercise.locator('input:visible')).toHaveCount(0);
     await expect(page.locator('.tk-session-log')).toBeHidden();
     await expect(page.getByRole('button', { name: 'Завершити та зберегти сесію', exact: true })).toBeHidden();
