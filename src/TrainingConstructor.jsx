@@ -489,18 +489,28 @@ function ExRow({ item, idx, week, plan, heavy, tech, onSwap, onCoachEdit, onRemo
           {item.boost && <span className="tk-badge tk-b-prio">ПРІОРИТЕТ</span>}
           {item.ex.manualOnly && <span className="tk-badge tk-b-tech">ЛИШЕ РУЧНА ЗАМІНА</span>}
         </div>
-        <div className="tk-presc">
-          {sets} × {repsFor(item, p.goal, week, heavy, plan)}{item.ex.uni ? ' ' + uniLabel(item.ex) : ''} <i>·</i> RIR {rirFor(item, week, plan)} <i>·</i> темп {tempo} <i>·</i> {restFor(item, plan, heavy)}
-        </div>
+        <dl className="tk-presc">
+          <div><dt>Підходи</dt><dd>{sets}</dd></div>
+          <div><dt>{item.ex.u === 'time' ? 'Тривалість' : 'Повторення'}</dt><dd>{repsFor(item, p.goal, week, heavy, plan)}</dd></div>
+          <div><dt>RIR · у запасі</dt><dd>{rirFor(item, week, plan)}</dd></div>
+          <div><dt>Відпочинок</dt><dd>{restFor(item, plan, heavy)}</dd></div>
+        </dl>
+        <div className="tk-presc-note">Темп <strong>{tempo}</strong>{item.ex.uni ? ' · ' + uniLabel(item.ex) : ''}</div>
         {isLoadable(item.ex) && (
           <div className="tk-load">
             {loadFor(item, week, heavy, anchors, plan) && <b>{loadFor(item, week, heavy, anchors, plan)} {loadUnit}</b>}
+            <label className="tk-logfield">Орієнтир, {item.ex.eq === 'dumbbell' ? 'кг/гантель' : 'кг'}
             <input className="tk-wnum" aria-label={item.ex.eq === 'dumbbell' ? 'Орієнтир ваги однієї гантелі' : 'Орієнтир ваги'} type="number" step="0.1" min="0" placeholder={item.ex.eq === 'dumbbell' ? 'кг/гантель' : 'вага, кг'}
               value={anchor.weight || ''} onChange={(e) => onAnchor(item.ex.id, 'weight', e.target.value)} />
+            </label>
+            <label className="tk-logfield">Повтори
             <input className="tk-wnum" aria-label="Повтори з орієнтирною вагою" type="number" step="1" min="1" max="30" placeholder="повтори"
               value={anchor.reps || ''} onChange={(e) => onAnchor(item.ex.id, 'reps', e.target.value)} />
+            </label>
+            <label className="tk-logfield">RIR
             <input className="tk-wnum" aria-label="RIR орієнтирного підходу" type="number" step="1" min="0" max="10" placeholder="RIR"
               value={anchor.rir ?? ''} onChange={(e) => onAnchor(item.ex.id, 'rir', e.target.value)} />
+            </label>
             {e1rm && <span style={{ fontSize: 11, color: 'var(--steel)' }}>орієнтовний 1ПМ ≈ {roundDisplay(e1rm)} кг · {e1rmQuality.label} · планова вага залежить від цілі й тижня</span>}
             {e1rmQuality && !e1rmQuality.eligible && <span style={{ fontSize: 11, color: 'var(--hot)' }}>Цей підхід не є якірним для e1RM: автоматичний розрахунок не використовує понад 15 повторів або RIR понад 5.</span>}
             {rawAnchor && typeof rawAnchor !== 'object' && <span style={{ fontSize: 11, color: 'var(--hot)' }}>старий орієнтир: підтвердь повтори або RIR, щоб перейти на розрахунок від орієнтовного 1ПМ</span>}
@@ -510,29 +520,29 @@ function ExRow({ item, idx, week, plan, heavy, tech, onSwap, onCoachEdit, onRemo
           {REGION[item.ex.rg]}{item.ex.s && item.ex.s.length ? ' + ' + item.ex.s.map((x) => MUSCLE[x]).join(', ') : ''} · {item.ex.t === 'comp' ? 'базова' : 'ізоляція'}
           {tech && <span className="tk-badge tk-b-tech">останній підхід: дроп-сет або 3–5 часткових у розтягнутій позиції</span>}
         </div>
-        <div className="tk-log">
-          <label className="tk-logdone">
+        <div className={'tk-log tk-exercise-log' + (log.done ? ' is-done' : '')}>
+          <div className="tk-logheading"><strong>Журнал підходів</strong><label className="tk-logdone">
             <input type="checkbox" checked={!!log.done} onChange={(e) => onLog('done', e.target.checked)} />
-            Виконано
-          </label>
+            Вправу виконано
+          </label></div>
           {Array.from({ length: sets }, (_, setIndex) => (
-            <div key={setIndex} style={{ display: 'flex', gap: 6, alignItems: 'end', flexWrap: 'wrap' }}>
-              <b style={{ fontSize: 11 }}>Підхід {setIndex + 1}</b>
+            <div key={setIndex} className={'tk-set-row' + (isLoadable(item.ex) ? '' : ' tk-set-bodyweight')} role="group" aria-label={'Підхід ' + (setIndex + 1)}>
+              <b className="tk-set-number"><span>Підхід</span> {setIndex + 1}</b>
               {isLoadable(item.ex) && <label className="tk-logfield">{item.ex.eq === 'dumbbell' ? 'кг/гантель' : 'кг'}<input type="number" min="0" step="0.1" value={log.sets?.[setIndex]?.weight ?? ''} onChange={(e) => setLog(setIndex, 'weight', e.target.value)} /></label>}
               <label className="tk-logfield">{item.ex.u === 'time' ? 'сек' : 'повт.'}<input type="number" min="0" step="1" value={log.sets?.[setIndex]?.reps ?? ''} onChange={(e) => setLog(setIndex, 'reps', e.target.value)} /></label>
               <label className="tk-logfield">RIR<input type="number" min="0" max="10" step="1" value={log.sets?.[setIndex]?.rir ?? ''} onChange={(e) => setLog(setIndex, 'rir', e.target.value)} /></label>
             </div>
           ))}
-          <label className="tk-logfield">Біль 0–10
+          <div className="tk-log-notes"><label className="tk-logfield">Біль 0–10
             <input type="number" min="0" max="10" step="1" value={log.pain ?? ''} onChange={(e) => onLog('pain', e.target.value)} />
           </label>
-          <label className="tk-logfield" style={{ minWidth: 220 }}>Нотатка
+          <label className="tk-logfield tk-note-field">Нотатка
             <input type="text" maxLength="1000" value={log.note ?? ''} onChange={(e) => onLog('note', e.target.value)} />
-          </label>
+          </label></div>
         </div>
         {progression && <div className="tk-hint" style={{ marginTop: 7 }}><b>Наступний крок:</b> {progression}</div>}
-        <button className="tk-mini" onClick={() => setOpen(!open)}>{open ? 'Згорнути техніку' : 'Техніка'}</button>
-        {alts.length > 0 && <button className="tk-mini" onClick={() => setSwap(!swap)}>Замінити</button>}
+        <button className="tk-mini tk-ex-action" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? 'Згорнути техніку' : 'Техніка'}</button>
+        {alts.length > 0 && <button className="tk-mini tk-ex-action" aria-expanded={swap} onClick={() => setSwap(!swap)}>Замінити</button>}
         <button className="tk-mini" onClick={() => setEdit(!edit)}>{edit ? 'Закрити редактор' : 'Редагувати призначення'}</button>
         {item.ex.id.startsWith('custom-') && <button className="tk-mini tk-danger" onClick={onRemoveCustom}>Видалити власну вправу</button>}
         {item.why && item.why.length > 0 && <button className="tk-mini" onClick={() => setWhy(!why)}>{why ? 'Згорнути' : 'Чому саме ця вправа'}</button>}
@@ -1151,12 +1161,12 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
               Дані програми завантажено, але відповіді іншої людини не замінюють твій скринінг. Заповни анкету нижче; план відкриється лише після проходження перевірки.
             </div>
           )}
-          <div className="tk-card">
-            <div className="tk-eyebrow">Уже маєш резервну копію?</div>
+          <details className="tk-card tk-import">
+            <summary>Уже маєш резервну копію? <span>Відновити дані</span></summary>
             <p className="tk-p">Імпортуй JSON-файл — профіль, програма та журнал відновляться на цьому пристрої.</p>
             <button className="tk-mini" style={{ paddingLeft: 0 }} onClick={() => importRef.current?.click()}>Імпортувати резервну копію</button>
             <input ref={importRef} className="tk-file" aria-label="Імпорт резервної копії" type="file" accept="application/json,.json" onChange={importBackup} />
-          </div>
+          </details>
           <Wizard p={profile} set={set} onBuild={build} />
         </div>
       </div>
@@ -1373,14 +1383,14 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
             <span><b>{dayDone}/{view.days[day].items.length}</b> вправ виконано</span>
             <span>Журнал зберігається на пристрої</span>
           </div>
-          <div className="tk-log" style={{ marginBottom: 10 }}>
+          <div className="tk-log tk-session-log">
             <label className="tk-logfield">Готовність до сесії 1–5
               <input type="number" min="1" max="5" step="1" value={sessionLog.readiness ?? ''} onChange={(e) => updateLog(sessionKey, 'readiness', e.target.value)} />
             </label>
             <label className="tk-logfield">Session-RPE 0–10
               <input type="number" min="0" max="10" step="1" value={sessionLog.sessionRpe ?? ''} onChange={(e) => updateLog(sessionKey, 'sessionRpe', e.target.value)} />
             </label>
-            <label className="tk-logfield" style={{ minWidth: 260 }}>Нотатка тренера / про сесію
+            <label className="tk-logfield tk-note-field">Нотатка тренера / про сесію
               <input type="text" maxLength="1000" value={sessionLog.note ?? ''} onChange={(e) => updateLog(sessionKey, 'note', e.target.value)} />
             </label>
           </div>
