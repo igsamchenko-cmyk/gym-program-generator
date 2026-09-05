@@ -377,7 +377,7 @@ export const CSS = `
 .tk-ex{position:relative;overflow:hidden;background:radial-gradient(circle at 100% 0,var(--accent-a-soft),transparent 33%),radial-gradient(circle at 0 100%,var(--accent-b-soft),transparent 38%),var(--card);border-color:var(--accent-line);box-shadow:0 14px 36px rgba(0,0,0,.10),inset 0 1px 0 rgba(255,255,255,.06);}
 .tk-ex::before{content:"";position:absolute;left:0;top:22px;bottom:22px;width:3px;border-radius:0 4px 4px 0;background:linear-gradient(180deg,var(--accent-a),var(--accent-b));opacity:.85;}
 .tk-exname{font-size:20px;font-weight:750;letter-spacing:-.025em;}
-.tk-idx{display:grid;place-items:center;width:30px;height:30px;min-width:30px;padding:0;border:1px solid var(--accent-line);border-radius:9px;background:linear-gradient(145deg,var(--accent-a-soft),var(--accent-b-soft));color:var(--link);font-size:11px;}
+.tk-idx{display:grid;place-items:center;width:40px;height:40px;min-width:40px;padding:0;border:1px solid var(--accent-line);border-radius:12px;background:linear-gradient(145deg,var(--accent-a-soft),var(--accent-b-soft));box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 5px 14px rgba(0,0,0,.08);color:var(--ink);font-size:13px;font-weight:750;letter-spacing:.02em;}
 .tk-presc{gap:10px;}
 .tk-presc>div{position:relative;overflow:hidden;padding:14px;background:linear-gradient(145deg,var(--metric-a),var(--metric-b)),var(--surf);border-color:var(--accent-line);border-radius:13px;box-shadow:inset 0 1px 0 rgba(255,255,255,.055);}
 .tk-presc>div::before{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:linear-gradient(90deg,var(--accent-a),var(--accent-b));opacity:.72;}
@@ -461,6 +461,8 @@ export const CSS = `
  .tk-mark{font-size:13px;}
  .tk-theme{font-size:10px;padding:5px 7px;}
 }
+
+@media (max-width:400px){.tk-idx{width:36px;height:36px;min-width:36px;font-size:12px;}}
 
 @media (prefers-reduced-motion:reduce){.tk-action{transition:none;}}
 
