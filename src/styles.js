@@ -399,6 +399,69 @@ export const CSS = `
  .tk-ex::before{top:16px;bottom:16px;}
  .tk-idx{margin-bottom:12px;}
 }
+
+/* Streamlined instructor workspace */
+.tk{display:flex;flex-direction:column;}
+.tk-main{width:100%;flex:1;}
+.tk-credit{position:static;order:5;align-self:center;right:auto;bottom:auto;z-index:1;margin:0 auto 20px;box-shadow:none;}
+.tk-program-view{--workspace-a:#EEF3F0;--workspace-b:#F6F3FA;background-color:var(--workspace-a);background-image:radial-gradient(circle at 12% 4%,var(--accent-b-soft),transparent 30%),radial-gradient(circle at 88% 2%,var(--accent-a-soft),transparent 32%),linear-gradient(180deg,var(--workspace-a),var(--workspace-b));background-size:auto;background-attachment:fixed;}
+.tk-program-view[data-theme="dark"]{--workspace-a:#0D1411;--workspace-b:#12111B;}
+.tk-program-view::before{display:none;}
+.tk-program-view .tk-main{max-width:1120px;padding-top:28px;}
+.tk-program-view .tk-card:not(.tk-program-hero){border-radius:18px;box-shadow:0 12px 34px rgba(7,14,11,.09);}
+.tk-current-workout{scroll-margin-top:18px;}
+.tk-current-workout::before{content:"Поточне тренування";display:block;width:max-content;margin:-8px 0 16px;padding:5px 9px;border-radius:999px;background:linear-gradient(115deg,var(--accent-a-soft),var(--accent-b-soft));color:var(--link);font-size:10px;font-weight:750;text-transform:uppercase;letter-spacing:.09em;}
+.tk-screen-state{margin-top:12px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-size:12px;}
+.tk-screen-pending{background:var(--surf);color:var(--steel);}
+.tk-screen-ok{display:flex;align-items:center;gap:7px;border-color:rgba(31,182,166,.38);background:var(--accent-b-soft);color:var(--ink);font-weight:650;}
+.tk-screen-ok span{display:grid;place-items:center;width:19px;height:19px;border-radius:50%;background:var(--accent-b);color:#fff;font-size:11px;}
+.tk-import-link{width:max-content;max-width:100%;margin:0 0 12px auto;color:var(--steel);}
+.tk-import-link summary{display:flex;align-items:center;gap:7px;padding:7px 3px;list-style:none;color:var(--link);font-size:12px;font-weight:650;cursor:pointer;}
+.tk-import-link summary::-webkit-details-marker{display:none;}
+.tk-import-link[open]{width:100%;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--card-glass);box-shadow:var(--card-shadow);}
+.tk-import-link[open] summary{padding:0 0 8px;}
+.tk-import-link .tk-p{margin:0 0 6px;font-size:13px;}
+.tk-import-link .tk-mini{margin:0;}
+.tk-journal-toggle{margin:16px 0;padding:13px 14px;border:1px solid var(--accent-line);border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,.05);}
+.tk-journal-toggle strong{font-size:13px;}
+.tk-journal-toggle p{max-width:620px;font-size:12px;line-height:1.45;}
+.tk-journal-toggle .tk-opt{min-height:38px;border-radius:10px;font-weight:700;}
+.tk-coach-workspace>summary{padding:2px 0;}
+.tk-coach-workspace:not([open]){background:linear-gradient(120deg,var(--card) 55%,var(--accent-a-soft));border-color:var(--accent-line);}
+.tk-volrow{grid-template-columns:110px minmax(100px,1fr) minmax(155px,auto);}
+.tk-volnum{display:flex;flex-direction:column;gap:2px;font-family:inherit;text-align:left;}
+.tk-volnum b{color:var(--ink);font-size:12px;font-weight:700;}
+.tk-volnum small{color:var(--steel);font-size:10px;}
+.tk-wk b{overflow:visible;}
+.tk-wk b small{display:block;min-height:13px;color:var(--dl);font-family:inherit;font-size:8px;font-weight:750;letter-spacing:-.01em;}
+.tk-action-session{order:-1;}
+@media (max-width:680px){
+ .tk-bar{padding:10px 12px;gap:8px;flex-wrap:nowrap;}
+ .tk-mark{font-size:15px;white-space:nowrap;}
+ .tk-sub{display:none;}
+ .tk-theme{min-height:36px;padding:6px 9px;white-space:nowrap;}
+ .tk-main{padding:14px 12px 58px;}
+ .tk-program-view .tk-main{padding-top:14px;}
+ .tk-program-view .tk-card:not(.tk-program-hero){border-radius:15px;}
+ .tk-program-hero .tk-actions{grid-template-columns:1fr 1fr;}
+ .tk-action-session{grid-column:1/-1;}
+ .tk-journal-toggle{flex-direction:column;align-items:stretch;gap:10px;}
+ .tk-journal-toggle .tk-opt{width:100%;}
+ .tk-volrow{grid-template-columns:88px 1fr;gap:7px 9px;}
+ .tk-volnum{grid-column:2;text-align:left;}
+ .tk-split{grid-column:1/-1;}
+ .tk-wk b small{font-size:7px;}
+ .tk-credit{margin-bottom:12px;}
+}
+@media (max-width:400px){
+ .tk-main{padding:12px 8px 58px;}
+ .tk-program-view .tk-main{padding-top:12px;}
+}
+@media (max-width:380px){
+ .tk-mark{font-size:13px;}
+ .tk-theme{font-size:10px;padding:5px 7px;}
+}
+
 @media (prefers-reduced-motion:reduce){.tk-action{transition:none;}}
 
 @media (prefers-reduced-motion:reduce){.tk-wk span{transition:none;}}

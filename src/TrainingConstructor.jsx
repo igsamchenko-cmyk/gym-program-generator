@@ -296,7 +296,7 @@ function Wizard({ p, set, onBuild }) {
   const focusInfo = FOCUS[p.focus] || CUSTOM_FOCUS;
   const customReady = p.mode !== 'custom' || Array.from({ length: p.days }).every((_, i) => p.customDays[i] && p.customDays[i].groups.length);
   const screenComplete = screen.activity && screen.symptoms && screen.condition && screen.intensity;
-  const medicalBlock = screen.symptoms === 'yes' || screen.condition !== 'no';
+  const medicalBlock = screen.symptoms === 'yes' || screen.condition === 'yes' || screen.condition === 'unsure';
   const teenReady = p.age >= 18 || screen.supervision;
   const timeCapReady = [45, 60, 75, 90, 120].includes(p.timeCap);
   const ready = customReady && screenComplete && !medicalBlock && teenReady && timeCapReady;
@@ -401,8 +401,8 @@ function Wizard({ p, set, onBuild }) {
       </div>
 
       <div className="tk-field">
-        <HelpLabel label="Головна ціль">Гіпертрофія налаштовує програму на ріст м’язів, сила — на важчі підходи й довший відпочинок, здоров’я — на кероване навантаження, зниження ваги — на щільніші сесії. Втрата ваги все одно залежить насамперед від харчування.</HelpLabel>
-        <OptRow options={[['hyper', 'Гіпертрофія'], ['strength', 'Сила'], ['fatloss', 'Зниження ваги'], ['health', 'Здоров’я']]} value={p.goal} onChange={(v) => set({ goal: v })} />
+        <HelpLabel label="Головна ціль">Ріст м’язів налаштовує програму на поступове збільшення тренувального обсягу, сила — на важчі підходи й довший відпочинок, здоров’я — на кероване навантаження, зниження ваги — на щільніші сесії. Втрата ваги все одно залежить насамперед від харчування.</HelpLabel>
+        <OptRow options={[['hyper', 'Ріст м’язів'], ['strength', 'Сила'], ['fatloss', 'Зниження ваги'], ['health', 'Здоров’я']]} value={p.goal} onChange={(v) => set({ goal: v })} />
         <div className="tk-hint">{GOAL_GUIDANCE[p.goal]}</div>
       </div>
 
@@ -439,6 +439,8 @@ function Wizard({ p, set, onBuild }) {
         <OptRow ariaLabel="Відомі захворювання" options={[['no', 'Ні'], ['yes', 'Так'], ['unsure', 'Не впевнений']]} value={screen.condition} onChange={(condition) => setScreen((s) => ({ ...s, condition }))} />
         <span className="tk-lbl" style={{ marginTop: 10 }}>Запланована інтенсивність</span>
         <OptRow ariaLabel="Запланована інтенсивність" options={[['moderate', 'Помірна'], ['vigorous', 'Висока']]} value={screen.intensity} onChange={(intensity) => setScreen((s) => ({ ...s, intensity }))} />
+        {!screenComplete && !medicalBlock && <div className="tk-screen-state tk-screen-pending">Заповни всі чотири відповіді — результат перевірки з’явиться після завершення.</div>}
+        {screenComplete && !medicalBlock && <div className="tk-screen-state tk-screen-ok"><span aria-hidden="true">✓</span> Перевірку завершено. Автоматичну програму можна створювати.</div>}
         {medicalBlock && <div className="tk-alert" style={{ marginTop: 10 }}><b>Потрібна індивідуальна оцінка</b>Автоматичний план не створюється за наявності симптомів, відомого захворювання або невизначеної відповіді. Узгодь початок і інтенсивність тренувань із медичним фахівцем.</div>}
         {screen.activity === 'no' && screen.intensity === 'vigorous' && !medicalBlock && <div className="tk-hint">Після перерви почни з помірної інтенсивності й нарощуй її поступово.</div>}
       </div>
@@ -617,7 +619,7 @@ function VolumePanel({ plan, week }) {
             <div className="tk-volrow" key={k}>
               <span>{MUSCLE[k]}</span>
               <span className="tk-track"><span className={'tk-fill ' + cls} style={{ width: Math.min(100, (v / (hi * 1.25)) * 100) + '%' }} /></span>
-              <span className="tk-volnum">{v} <span style={{ opacity: 0.55 }}>/{hi}</span></span>
+              <span className="tk-volnum"><b>Заплановано: {v} підходів</b><small>Орієнтир: до {hi}</small></span>
               {v > 0 && fr < 2 && <span className="tk-split" style={{ color: 'var(--hot)' }}>частота {fr}×/тиж — перевір, чи зручно виконати весь обсяг якісно; другий день може лише полегшити його розподіл</span>}
               {parts.length > 1 && <span className="tk-split">{parts.map(([rg, n]) => REGION[rg].split(' · ')[1] + ' ' + n).join(' · ')}</span>}
             </div>
@@ -625,8 +627,7 @@ function VolumePanel({ plan, week }) {
         })}
       </div>
       <p className="tk-hint" style={{ marginTop: 14 }}>
-        Друге число — консервативна стеля для рівня «{LEVEL_LABEL[plan.profile.level]}» і цілі «{GOAL_LABEL[plan.profile.goal]}»; вона різна по групах. Сіре заповнення нижче орієнтиру не означає автоматично недостатню програму: потреба залежить від стажу, пріоритетів, непрямої роботи та переносимості. Другий рядок під групою — розподіл по підспецифікаціях:
-        різні тяги змінюють акцент роботи спини, а положення коліна змінює відносний внесок литкового й камбалоподібного м’язів.
+        Стовпчик показує запланований обсяг, а орієнтир — його консервативну верхню межу для вибраного рівня та цілі. Деталізація під групою показує, як підходи розподілені між її частинами.
       </p>
       {Object.keys(plan.volumeTrimmed || {}).length > 0 && (
         <p className="tk-hint">Генератор автоматично зменшив зайві підходи на піковому тижні, щоб жодна група не перевищувала свою верхню межу.</p>
@@ -652,13 +653,13 @@ function CoachWorkspacePanel({
   const [revisionNote, setRevisionNote] = useState('');
   const change = (field, value) => setDraft((current) => ({ ...current, [field]: value }));
   return (
-    <details className="tk-card tk-coach-workspace" open>
+    <details className="tk-card tk-coach-workspace">
       <summary><b>Робоче місце тренера</b><span>клієнти · власні вправи · версії програми</span></summary>
       <div className="tk-coach-body">
         <label className="tk-wide-label">Ім’я або код клієнта
           <input type="text" maxLength="120" value={clientName} onChange={(e) => onClientName(e.target.value)} placeholder="Наприклад: Клієнт А" />
         </label>
-        <p className="tk-hint">Профілі зберігаються лише на цьому пристрої в IndexedDB (або браузерному резервному сховищі). Це не зашифрована CRM: використовуй код клієнта замість чутливих даних і регулярно експортуй резервну копію.</p>
+        <p className="tk-hint">Профілі зберігаються лише в цьому браузері. Для приватності використовуй код клієнта; резервна копія переносить профілі на інший пристрій.</p>
         <div className="tk-client-actions">
           <button type="button" className="tk-mini" disabled={!clientName.trim()} onClick={onSaveClient}>Зберегти профіль клієнта</button>
           {clients.map((client) => (
@@ -1175,9 +1176,9 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
               Дані програми завантажено, але відповіді іншої людини не замінюють твій скринінг. Заповни анкету нижче; план відкриється лише після проходження перевірки.
             </div>
           )}
-          <details className="tk-card tk-import">
-            <summary>Уже маєш резервну копію? <span>Відновити дані</span></summary>
-            <p className="tk-p">Імпортуй JSON-файл — профіль, програма та журнал відновляться на цьому пристрої.</p>
+          <details className="tk-import tk-import-link">
+            <summary><span aria-hidden="true">↺</span> Відновити дані з резервної копії</summary>
+            <p className="tk-p">Обери збережену резервну копію, щоб відновити профілі та програми.</p>
             <button className="tk-mini" style={{ paddingLeft: 0 }} onClick={() => importRef.current?.click()}>Імпортувати резервну копію</button>
             <input ref={importRef} className="tk-file" aria-label="Імпорт резервної копії" type="file" accept="application/json,.json" onChange={importBackup} />
           </details>
@@ -1273,7 +1274,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
   };
 
   return (
-    <div className="tk" data-theme={theme}>
+    <div className="tk tk-program-view" data-theme={theme}>
       <style>{CSS}</style>
       <Header theme={theme} onToggle={onThemeToggle} />
       <Toast toast={toast} />
@@ -1303,7 +1304,8 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
             {profile.avoid.map((key) => <span className="tk-chip" key={'avoid-' + key}>× {AVOID[key].label}</span>)}
           </div>
           <div className="tk-actions" aria-label="Дії з програмою">
-            <button className="tk-action tk-action-primary" aria-label="Змінити параметри" onClick={() => setPlan(null)}><span aria-hidden="true">⚙</span> Налаштувати</button>
+            <a className="tk-action tk-action-primary tk-action-session" href="#current-workout"><span aria-hidden="true">↓</span> До тренування</a>
+            <button className="tk-action" aria-label="Змінити параметри" onClick={() => setPlan(null)}><span aria-hidden="true">⚙</span> Налаштувати</button>
             <button className="tk-action" onClick={copy}><span aria-hidden="true">▣</span> Копіювати</button>
             <button className="tk-action" onClick={shareProgram}><span aria-hidden="true">↗</span> Поділитися</button>
             <button className="tk-action" aria-label="Експорт у Excel" onClick={exportXlsx} disabled={exporting}><span aria-hidden="true">↓</span> {exporting ? 'Готую файл…' : 'Excel'}</button>
@@ -1332,29 +1334,10 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
           </div>
         )}
 
-        <ReadingGuide />
-
         {appliesHere && (
           <div className={'tk-alert tk-adaptation ' + pendingAdaptation.decision.level}><b>Одноразова корекція цієї сесії</b>
             Підходи ×{pendingAdaptation.decision.setFactor}; планова вага ×{pendingAdaptation.decision.loadFactor}. Решта плану й експорт не змінені.
           </div>
-        )}
-
-        <CoachWorkspacePanel days={view.days} clientName={clientName} onClientName={setClientName}
-          revisions={programRevisions} onSaveRevision={saveRevision} onRestoreRevision={restoreRevision} currentSnapshot={currentSnapshot}
-          autoAdjust={autoAdjust} onAutoAdjust={(value) => { setAutoAdjust(value); if (!value) setPendingAdaptation(null); }}
-          adaptation={adaptation} onAddCustom={addCustomExercise} clients={clients}
-          onSaveClient={saveClientProfile} onLoadClient={loadClientProfile} onDeleteClient={deleteClientProfile} />
-
-        <div className="tk-card tk-journal-toggle">
-          <div><strong>Журнал клієнта · за бажанням</strong><p>Записи ваг, повторень і самопочуття. Для складання та експорту програми вони не потрібні.</p></div>
-          <button type="button" className="tk-opt" aria-expanded={showJournal} onClick={() => setShowJournal((value) => !value)}>
-            {showJournal ? 'Сховати журнал' : 'Відкрити журнал'}
-          </button>
-        </div>
-
-        {profile.goal === 'health' && (
-          <HealthPlanPanel showJournal={showJournal} profile={profile} weekIndex={wk} log={journal[healthWeekKey(wk)] || {}} onChange={(field, value) => updateLog(healthWeekKey(wk), field, value)} />
         )}
 
         <div className="tk-card">
@@ -1363,7 +1346,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
             {weeks.map((w, i) => (
               <button key={i} className="tk-wk" aria-pressed={i === wk} onClick={() => setWk(i)} title={w.tag}>
                 <span style={{ height: Math.round(Math.min(w.mult, 1.5) * 55) + '%', background: w.deload ? 'var(--dl)' : w.heavy ? 'var(--hot)' : 'var(--deep)', opacity: w.deload || w.heavy ? 1 : 0.35 + 0.45 * (w.mult - 0.5) }} />
-                <b>{w.deload ? 'DL' : i + 1}</b>
+                <b>{i + 1}{w.deload && <small>розвантаження</small>}</b>
               </button>
             ))}
           </div>
@@ -1378,7 +1361,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
           <p className="tk-p" style={{ marginBottom: 0 }}>{week.note}</p>
         </div>
 
-        <div className="tk-card tk-card-dense">
+        <div className="tk-card tk-card-dense tk-current-workout" id="current-workout">
           <div className="tk-days">
             {view.days.map((d, i) => (
               <button key={i} className="tk-day" aria-pressed={i === day} onClick={() => setDay(i)}>{dayLabelFor(i)}{d.name}</button>
@@ -1411,6 +1394,13 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
             <strong style={{ fontSize: 13 }}>Розминка</strong>
             <ul>{warm.map((item) => <WarmupItem key={item.id} item={item} />)}</ul>
           </div>
+          <div className="tk-journal-toggle">
+            <div><strong>Журнал клієнта · за бажанням</strong><p>Записи ваг, повторень і самопочуття. Для складання та експорту програми вони не потрібні.</p></div>
+            <button type="button" className="tk-opt" aria-expanded={showJournal} onClick={() => setShowJournal((value) => !value)}>
+              {showJournal ? 'Сховати журнал' : 'Відкрити журнал'}
+            </button>
+          </div>
+
           {showJournal && (
             <>
               <div className="tk-journal-progress">
@@ -1458,6 +1448,18 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
         )}
 
         <VolumePanel plan={view} week={week} />
+
+        {profile.goal === 'health' && (
+          <HealthPlanPanel showJournal={showJournal} profile={profile} weekIndex={wk} log={journal[healthWeekKey(wk)] || {}} onChange={(field, value) => updateLog(healthWeekKey(wk), field, value)} />
+        )}
+
+        <ReadingGuide />
+
+        <CoachWorkspacePanel days={view.days} clientName={clientName} onClientName={setClientName}
+          revisions={programRevisions} onSaveRevision={saveRevision} onRestoreRevision={restoreRevision} currentSnapshot={currentSnapshot}
+          autoAdjust={autoAdjust} onAutoAdjust={(value) => { setAutoAdjust(value); if (!value) setPendingAdaptation(null); }}
+          adaptation={adaptation} onAddCustom={addCustomExercise} clients={clients}
+          onSaveClient={saveClientProfile} onLoadClient={loadClientProfile} onDeleteClient={deleteClientProfile} />
 
         {showJournal && (
           <ProgressDashboard history={sessionHistory} onDelete={deleteSession}
