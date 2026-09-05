@@ -303,7 +303,7 @@ function Wizard({ p, set, onBuild }) {
   return (
     <div className="tk-card tk-card-dense">
       <div className="tk-eyebrow">Крок 1 — параметри</div>
-      <h2 className="tk-h">Розкажи про себе</h2>
+      <h2 className="tk-h">Параметри клієнта</h2>
       <p className="tk-p">Довжина тренувального блоку залежить від стажу: 5 тижнів для новачка, 7 для середнього рівня, 11 для просунутого.</p>
 
       <div className="tk-field">
@@ -394,7 +394,7 @@ function Wizard({ p, set, onBuild }) {
       </div>
 
       <div className="tk-field">
-        <span className="tk-lbl">Де тренуєшся</span>
+        <span className="tk-lbl">Місце тренувань</span>
         <OptRow options={[['gym', 'Зал'], ['home', 'Вдома']]} value={p.place}
           onChange={(place) => set({ place, bar: place === 'gym' || p.homeEquipment.includes('pullupbar') })} />
         {p.place === 'home' && <HomeEquipmentPanel value={p.homeEquipment} onChange={(homeEquipment) => set({ homeEquipment, bar: homeEquipment.includes('pullupbar') })} />}
@@ -455,7 +455,7 @@ function Wizard({ p, set, onBuild }) {
   );
 }
 
-function ExRow({ item, idx, week, plan, heavy, tech, onSwap, onCoachEdit, onRemoveCustom, anchors, onAnchor, log, onLog }) {
+function ExRow({ item, idx, week, plan, heavy, tech, onSwap, onCoachEdit, onRemoveCustom, anchors, onAnchor, log, onLog, showJournal }) {
   const [open, setOpen] = useState(false);
   const [swap, setSwap] = useState(false);
   const [why, setWhy] = useState(false);
@@ -471,6 +471,7 @@ function ExRow({ item, idx, week, plan, heavy, tech, onSwap, onCoachEdit, onRemo
   const e1rm = typeof rawAnchor === 'object' && rawAnchor ? estimated1RM(rawAnchor) : null;
   const e1rmQuality = typeof rawAnchor === 'object' && rawAnchor ? e1rmConfidence(rawAnchor) : null;
   const loadUnit = item.ex.eq === 'dumbbell' ? 'кг на одну гантель' : 'кг';
+  const plannedLoad = loadFor(item, week, heavy, anchors, plan);
   const progression = progressionSuggestion(log, item, week, plan, heavy);
   const setLog = (index, field, value) => {
     const next = Array.from({ length: sets }, (_, i) => ({ ...((log.sets || [])[i] || {}) }));
@@ -489,51 +490,21 @@ function ExRow({ item, idx, week, plan, heavy, tech, onSwap, onCoachEdit, onRemo
           {item.boost && <span className="tk-badge tk-b-prio">ПРІОРИТЕТ</span>}
           {item.ex.manualOnly && <span className="tk-badge tk-b-tech">ЛИШЕ РУЧНА ЗАМІНА</span>}
         </div>
-        <div className="tk-presc">
-          {sets} × {repsFor(item, p.goal, week, heavy, plan)}{item.ex.uni ? ' ' + uniLabel(item.ex) : ''} <i>·</i> RIR {rirFor(item, week, plan)} <i>·</i> темп {tempo} <i>·</i> {restFor(item, plan, heavy)}
-        </div>
-        {isLoadable(item.ex) && (
-          <div className="tk-load">
-            {loadFor(item, week, heavy, anchors, plan) && <b>{loadFor(item, week, heavy, anchors, plan)} {loadUnit}</b>}
-            <input className="tk-wnum" aria-label={item.ex.eq === 'dumbbell' ? 'Орієнтир ваги однієї гантелі' : 'Орієнтир ваги'} type="number" step="0.1" min="0" placeholder={item.ex.eq === 'dumbbell' ? 'кг/гантель' : 'вага, кг'}
-              value={anchor.weight || ''} onChange={(e) => onAnchor(item.ex.id, 'weight', e.target.value)} />
-            <input className="tk-wnum" aria-label="Повтори з орієнтирною вагою" type="number" step="1" min="1" max="30" placeholder="повтори"
-              value={anchor.reps || ''} onChange={(e) => onAnchor(item.ex.id, 'reps', e.target.value)} />
-            <input className="tk-wnum" aria-label="RIR орієнтирного підходу" type="number" step="1" min="0" max="10" placeholder="RIR"
-              value={anchor.rir ?? ''} onChange={(e) => onAnchor(item.ex.id, 'rir', e.target.value)} />
-            {e1rm && <span style={{ fontSize: 11, color: 'var(--steel)' }}>орієнтовний 1ПМ ≈ {roundDisplay(e1rm)} кг · {e1rmQuality.label} · планова вага залежить від цілі й тижня</span>}
-            {e1rmQuality && !e1rmQuality.eligible && <span style={{ fontSize: 11, color: 'var(--hot)' }}>Цей підхід не є якірним для e1RM: автоматичний розрахунок не використовує понад 15 повторів або RIR понад 5.</span>}
-            {rawAnchor && typeof rawAnchor !== 'object' && <span style={{ fontSize: 11, color: 'var(--hot)' }}>старий орієнтир: підтвердь повтори або RIR, щоб перейти на розрахунок від орієнтовного 1ПМ</span>}
-          </div>
-        )}
+        <dl className="tk-presc">
+          <div><dt>Підходи</dt><dd>{sets}</dd></div>
+          <div><dt>{item.ex.u === 'time' ? 'Тривалість' : 'Повторення'}</dt><dd>{repsFor(item, p.goal, week, heavy, plan)}</dd></div>
+          <div><dt>RIR · у запасі</dt><dd>{rirFor(item, week, plan)}</dd></div>
+          <div><dt>Відпочинок</dt><dd>{restFor(item, plan, heavy)}</dd></div>
+        </dl>
+        <div className="tk-presc-note">Темп <strong>{tempo}</strong>{item.ex.uni ? ' · ' + uniLabel(item.ex) : ''}</div>
+        {isLoadable(item.ex) && !!plannedLoad && <div className="tk-planned-load"><span>Планова вага</span><strong>{plannedLoad} {loadUnit}</strong></div>}
         <div className="tk-tags">
           {REGION[item.ex.rg]}{item.ex.s && item.ex.s.length ? ' + ' + item.ex.s.map((x) => MUSCLE[x]).join(', ') : ''} · {item.ex.t === 'comp' ? 'базова' : 'ізоляція'}
           {tech && <span className="tk-badge tk-b-tech">останній підхід: дроп-сет або 3–5 часткових у розтягнутій позиції</span>}
         </div>
-        <div className="tk-log">
-          <label className="tk-logdone">
-            <input type="checkbox" checked={!!log.done} onChange={(e) => onLog('done', e.target.checked)} />
-            Виконано
-          </label>
-          {Array.from({ length: sets }, (_, setIndex) => (
-            <div key={setIndex} style={{ display: 'flex', gap: 6, alignItems: 'end', flexWrap: 'wrap' }}>
-              <b style={{ fontSize: 11 }}>Підхід {setIndex + 1}</b>
-              {isLoadable(item.ex) && <label className="tk-logfield">{item.ex.eq === 'dumbbell' ? 'кг/гантель' : 'кг'}<input type="number" min="0" step="0.1" value={log.sets?.[setIndex]?.weight ?? ''} onChange={(e) => setLog(setIndex, 'weight', e.target.value)} /></label>}
-              <label className="tk-logfield">{item.ex.u === 'time' ? 'сек' : 'повт.'}<input type="number" min="0" step="1" value={log.sets?.[setIndex]?.reps ?? ''} onChange={(e) => setLog(setIndex, 'reps', e.target.value)} /></label>
-              <label className="tk-logfield">RIR<input type="number" min="0" max="10" step="1" value={log.sets?.[setIndex]?.rir ?? ''} onChange={(e) => setLog(setIndex, 'rir', e.target.value)} /></label>
-            </div>
-          ))}
-          <label className="tk-logfield">Біль 0–10
-            <input type="number" min="0" max="10" step="1" value={log.pain ?? ''} onChange={(e) => onLog('pain', e.target.value)} />
-          </label>
-          <label className="tk-logfield" style={{ minWidth: 220 }}>Нотатка
-            <input type="text" maxLength="1000" value={log.note ?? ''} onChange={(e) => onLog('note', e.target.value)} />
-          </label>
-        </div>
-        {progression && <div className="tk-hint" style={{ marginTop: 7 }}><b>Наступний крок:</b> {progression}</div>}
-        <button className="tk-mini" onClick={() => setOpen(!open)}>{open ? 'Згорнути техніку' : 'Техніка'}</button>
-        {alts.length > 0 && <button className="tk-mini" onClick={() => setSwap(!swap)}>Замінити</button>}
-        <button className="tk-mini" onClick={() => setEdit(!edit)}>{edit ? 'Закрити редактор' : 'Редагувати призначення'}</button>
+        <button className="tk-mini tk-ex-action tk-edit-action" aria-expanded={edit} onClick={() => setEdit(!edit)}>{edit ? 'Закрити редактор' : 'Редагувати призначення'}</button>
+        <button className="tk-mini tk-ex-action" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? 'Згорнути техніку' : 'Техніка'}</button>
+        {alts.length > 0 && <button className="tk-mini tk-ex-action" aria-expanded={swap} onClick={() => setSwap(!swap)}>Замінити</button>}
         {item.ex.id.startsWith('custom-') && <button className="tk-mini tk-danger" onClick={onRemoveCustom}>Видалити власну вправу</button>}
         {item.why && item.why.length > 0 && <button className="tk-mini" onClick={() => setWhy(!why)}>{why ? 'Згорнути' : 'Чому саме ця вправа'}</button>}
         {edit && (
@@ -548,6 +519,29 @@ function ExRow({ item, idx, week, plan, heavy, tech, onSwap, onCoachEdit, onRemo
             {item.coach?.sets && <label className="tk-check"><input type="checkbox" checked={!!item.coach.fixedSets} onChange={(e) => onCoachEdit('fixedSets', e.target.checked)} /><span>Фіксувати підходи в усі тижні</span></label>}
             {isLoadable(item.ex) && item.coach?.load && <label className="tk-check"><input type="checkbox" checked={!!item.coach.fixedLoad} onChange={(e) => onCoachEdit('fixedLoad', e.target.checked)} /><span>Фіксувати вагу в усі тижні</span></label>}
             <p className="tk-hint">Без фіксації ручне значення є базовим і змінюється за тижневою періодизацією та на делоаді. Крок ваги за замовчуванням залежить від типу обладнання; для гантелей значення вказується на одну гантель. Для конкретного стека чи мікродисків введи фактичний крок.</p>
+            {isLoadable(item.ex) && (
+              <details className="tk-anchor-settings">
+                <summary>Розрахунок ваги за контрольним підходом</summary>
+                <p className="tk-hint">Необов’язково: вкажи відомий підхід клієнта, щоб розрахувати орієнтовну вагу за тижнями.</p>
+                <div className="tk-load">
+                <label className="tk-logfield">Орієнтир, {item.ex.eq === 'dumbbell' ? 'кг/гантель' : 'кг'}
+                <input className="tk-wnum" aria-label={item.ex.eq === 'dumbbell' ? 'Орієнтир ваги однієї гантелі' : 'Орієнтир ваги'} type="number" step="0.1" min="0" placeholder={item.ex.eq === 'dumbbell' ? 'кг/гантель' : 'вага, кг'}
+                  value={anchor.weight || ''} onChange={(e) => onAnchor(item.ex.id, 'weight', e.target.value)} />
+                </label>
+                <label className="tk-logfield">Повтори
+                <input className="tk-wnum" aria-label="Повтори з орієнтирною вагою" type="number" step="1" min="1" max="30" placeholder="повтори"
+                  value={anchor.reps || ''} onChange={(e) => onAnchor(item.ex.id, 'reps', e.target.value)} />
+                </label>
+                <label className="tk-logfield">RIR
+                <input className="tk-wnum" aria-label="RIR орієнтирного підходу" type="number" step="1" min="0" max="10" placeholder="RIR"
+                  value={anchor.rir ?? ''} onChange={(e) => onAnchor(item.ex.id, 'rir', e.target.value)} />
+                </label>
+                {e1rm && <span style={{ fontSize: 11, color: 'var(--steel)' }}>орієнтовний 1ПМ ≈ {roundDisplay(e1rm)} кг · {e1rmQuality.label} · планова вага залежить від цілі й тижня</span>}
+                {e1rmQuality && !e1rmQuality.eligible && <span style={{ fontSize: 11, color: 'var(--hot)' }}>Цей підхід не є якірним для e1RM: автоматичний розрахунок не використовує понад 15 повторів або RIR понад 5.</span>}
+                {rawAnchor && typeof rawAnchor !== 'object' && <span style={{ fontSize: 11, color: 'var(--hot)' }}>старий орієнтир: підтвердь повтори або RIR, щоб перейти на розрахунок від орієнтовного 1ПМ</span>}
+                </div>
+              </details>
+            )}
             <button type="button" className="tk-mini" onClick={() => onCoachEdit('__reset', '')}>Скинути ручні правки</button>
           </div>
         )}
@@ -571,6 +565,31 @@ function ExRow({ item, idx, week, plan, heavy, tech, onSwap, onCoachEdit, onRemo
           </div>
         )}
         {swap && <div className="tk-swap">{alts.map((a) => (<button key={a.id} className="tk-opt" onClick={() => { onSwap(a); setSwap(false); }}>{a.n}</button>))}</div>}
+        {showJournal && (
+          <>
+            <div className={'tk-log tk-exercise-log' + (log.done ? ' is-done' : '')}>
+              <div className="tk-logheading"><strong>Журнал підходів</strong><label className="tk-logdone">
+                <input type="checkbox" checked={!!log.done} onChange={(e) => onLog('done', e.target.checked)} />
+                Вправу виконано
+              </label></div>
+              {Array.from({ length: sets }, (_, setIndex) => (
+                <div key={setIndex} className={'tk-set-row' + (isLoadable(item.ex) ? '' : ' tk-set-bodyweight')} role="group" aria-label={'Підхід ' + (setIndex + 1)}>
+                  <b className="tk-set-number"><span>Підхід</span> {setIndex + 1}</b>
+                  {isLoadable(item.ex) && <label className="tk-logfield">{item.ex.eq === 'dumbbell' ? 'кг/гантель' : 'кг'}<input type="number" min="0" step="0.1" value={log.sets?.[setIndex]?.weight ?? ''} onChange={(e) => setLog(setIndex, 'weight', e.target.value)} /></label>}
+                  <label className="tk-logfield">{item.ex.u === 'time' ? 'сек' : 'повт.'}<input type="number" min="0" step="1" value={log.sets?.[setIndex]?.reps ?? ''} onChange={(e) => setLog(setIndex, 'reps', e.target.value)} /></label>
+                  <label className="tk-logfield">RIR<input type="number" min="0" max="10" step="1" value={log.sets?.[setIndex]?.rir ?? ''} onChange={(e) => setLog(setIndex, 'rir', e.target.value)} /></label>
+                </div>
+              ))}
+              <div className="tk-log-notes"><label className="tk-logfield">Біль 0–10
+                <input type="number" min="0" max="10" step="1" value={log.pain ?? ''} onChange={(e) => onLog('pain', e.target.value)} />
+              </label>
+              <label className="tk-logfield tk-note-field">Нотатка
+                <input type="text" maxLength="1000" value={log.note ?? ''} onChange={(e) => onLog('note', e.target.value)} />
+              </label></div>
+            </div>
+            {progression && <div className="tk-hint" style={{ marginTop: 7 }}><b>Наступний крок:</b> {progression}</div>}
+          </>
+        )}
       </div>
     </div>
   );
@@ -633,8 +652,8 @@ function CoachWorkspacePanel({
   const [revisionNote, setRevisionNote] = useState('');
   const change = (field, value) => setDraft((current) => ({ ...current, [field]: value }));
   return (
-    <details className="tk-card tk-coach-workspace">
-      <summary><b>Робоче місце тренера</b><span>клієнт, власні вправи, ревізії та автоадаптація</span></summary>
+    <details className="tk-card tk-coach-workspace" open>
+      <summary><b>Робоче місце тренера</b><span>клієнти · власні вправи · версії програми</span></summary>
       <div className="tk-coach-body">
         <label className="tk-wide-label">Ім’я або код клієнта
           <input type="text" maxLength="120" value={clientName} onChange={(e) => onClientName(e.target.value)} placeholder="Наприклад: Клієнт А" />
@@ -649,13 +668,15 @@ function CoachWorkspacePanel({
             </span>
           ))}
         </div>
+        <details className="tk-coach-section"><summary>Корекція навантаження за журналом</summary>
         <label className="tk-check">
           <input type="checkbox" checked={autoAdjust} onChange={(e) => onAutoAdjust(e.target.checked)} />
           <span><b>Автоматично коригувати наступну сесію за журналом.</b> Низька готовність, session-RPE 9–10 або біль ≥4/10 зменшують підходи й планову вагу.</span>
         </label>
         <div className={'tk-adaptation ' + adaptation.level}><b>Поточне рішення:</b> {adaptation.message}</div>
+        </details>
 
-        <h3 className="tk-subhead">Додати власну вправу</h3>
+        <details className="tk-coach-section"><summary>Додати власну вправу</summary>
         <div className="tk-coach-editor">
           <label>День<select value={draft.day} onChange={(e) => change('day', Number(e.target.value))}>{days.map((day, index) => <option value={index} key={index}>{index + 1}. {day.name}</option>)}</select></label>
           <label>Назва<input type="text" maxLength="120" value={draft.name} onChange={(e) => change('name', e.target.value)} /></label>
@@ -667,9 +688,10 @@ function CoachWorkspacePanel({
           <button type="button" className="tk-mini" disabled={!draft.name.trim()} onClick={() => { onAddCustom(draft); change('name', ''); }}>Додати до програми</button>
         </div>
 
-        <h3 className="tk-subhead">Історія змін програми</h3>
+        </details>
+        <details className="tk-coach-section"><summary>Історія змін програми</summary>
         <div className="tk-revision-add">
-          <input type="text" maxLength="240" value={revisionNote} onChange={(e) => setRevisionNote(e.target.value)} placeholder="Що і чому змінено" />
+          <input aria-label="Опис зміни програми" type="text" maxLength="240" value={revisionNote} onChange={(e) => setRevisionNote(e.target.value)} placeholder="Що і чому змінено" />
           <button type="button" className="tk-mini" onClick={() => { onSaveRevision(revisionNote); setRevisionNote(''); }}>Зберегти ревізію</button>
         </div>
         {revisions.length ? (
@@ -686,6 +708,7 @@ function CoachWorkspacePanel({
             </li>;
           })}</ul>
         ) : <p className="tk-hint">Ревізій ще немає. Згенерована або вручну зафіксована зміна з’явиться тут.</p>}
+        </details>
       </div>
     </details>
   );
@@ -719,6 +742,7 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
   const [profile, setProfile] = useState(DEFAULT_PROFILE);
   const [anchors, setAnchors] = useState({});
   const [journal, setJournal] = useState({});
+  const [showJournal, setShowJournal] = useState(false);
   const [sessionHistory, setSessionHistory] = useState([]);
   const [coachEdits, setCoachEdits] = useState({ prescriptions: {}, customExercises: [] });
   const [programRevisions, setProgramRevisions] = useState([]);
@@ -1151,12 +1175,12 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
               Дані програми завантажено, але відповіді іншої людини не замінюють твій скринінг. Заповни анкету нижче; план відкриється лише після проходження перевірки.
             </div>
           )}
-          <div className="tk-card">
-            <div className="tk-eyebrow">Уже маєш резервну копію?</div>
+          <details className="tk-card tk-import">
+            <summary>Уже маєш резервну копію? <span>Відновити дані</span></summary>
             <p className="tk-p">Імпортуй JSON-файл — профіль, програма та журнал відновляться на цьому пристрої.</p>
             <button className="tk-mini" style={{ paddingLeft: 0 }} onClick={() => importRef.current?.click()}>Імпортувати резервну копію</button>
             <input ref={importRef} className="tk-file" aria-label="Імпорт резервної копії" type="file" accept="application/json,.json" onChange={importBackup} />
-          </div>
+          </details>
           <Wizard p={profile} set={set} onBuild={build} />
         </div>
       </div>
@@ -1255,6 +1279,9 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
       <Toast toast={toast} />
       <div className="tk-main">
         <div className="tk-card">
+          <div className="tk-eyebrow">Конструктор для інструктора</div>
+          <h2 className="tk-h">Програма тренувань</h2>
+          <p className="tk-p">Налаштуй параметри клієнта, відредагуй вправи та передай готову програму.</p>
           <div className="tk-chips">
             {clientName && <span className="tk-chip">Клієнт: {clientName}</span>}
             <span className="tk-chip">{profile.age} р.</span>
@@ -1281,10 +1308,11 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
             <button className="tk-mini" onClick={reset}>Скинути все</button>
           </div>
           <input ref={importRef} className="tk-file" aria-label="Імпорт резервної копії" type="file" accept="application/json,.json" onChange={importBackup} />
+          <details className="tk-plan-adjustments"><summary>Відновлення та навантаження{profile.fatigue ? ' · запобіжник увімкнено' : ''}</summary>
           <label className="tk-check" style={{ marginTop: 12, marginBottom: 0 }}>
             <input type="checkbox" checked={profile.fatigue} onChange={(e) => setFatigue(e.target.checked)} />
             <span>Сон або енергія просіли другий тиждень поспіль — увімкнути запобіжник. Інтенсивні техніки знімаються, з ізоляції йде по одному підходу, база лишається недоторканою.</span>
-          </label>
+          </label></details>
         </div>
 
         {alerts.length > 0 && (
@@ -1308,11 +1336,15 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
           adaptation={adaptation} onAddCustom={addCustomExercise} clients={clients}
           onSaveClient={saveClientProfile} onLoadClient={loadClientProfile} onDeleteClient={deleteClientProfile} />
 
-        <ProgressDashboard history={sessionHistory} onDelete={deleteSession}
-          plannedSets={view.days[day].items.reduce((sum, item, index) => sum + setsFor(item, week, sessionPlan, isHeavy(day, index, week, sessionPlan)), 0)} plannedSessionsPerWeek={profile.days} />
+        <div className="tk-card tk-journal-toggle">
+          <div><strong>Журнал клієнта · за бажанням</strong><p>Записи ваг, повторень і самопочуття. Для складання та експорту програми вони не потрібні.</p></div>
+          <button type="button" className="tk-opt" aria-expanded={showJournal} onClick={() => setShowJournal((value) => !value)}>
+            {showJournal ? 'Сховати журнал' : 'Відкрити журнал'}
+          </button>
+        </div>
 
         {profile.goal === 'health' && (
-          <HealthPlanPanel profile={profile} weekIndex={wk} log={journal[healthWeekKey(wk)] || {}} onChange={(field, value) => updateLog(healthWeekKey(wk), field, value)} />
+          <HealthPlanPanel showJournal={showJournal} profile={profile} weekIndex={wk} log={journal[healthWeekKey(wk)] || {}} onChange={(field, value) => updateLog(healthWeekKey(wk), field, value)} />
         )}
 
         <div className="tk-card">
@@ -1369,36 +1401,40 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
             <strong style={{ fontSize: 13 }}>Розминка</strong>
             <ul>{warm.map((item) => <WarmupItem key={item.id} item={item} />)}</ul>
           </div>
-          <div className="tk-journal-progress">
-            <span><b>{dayDone}/{view.days[day].items.length}</b> вправ виконано</span>
-            <span>Журнал зберігається на пристрої</span>
-          </div>
-          <div className="tk-log" style={{ marginBottom: 10 }}>
-            <label className="tk-logfield">Готовність до сесії 1–5
-              <input type="number" min="1" max="5" step="1" value={sessionLog.readiness ?? ''} onChange={(e) => updateLog(sessionKey, 'readiness', e.target.value)} />
-            </label>
-            <label className="tk-logfield">Session-RPE 0–10
-              <input type="number" min="0" max="10" step="1" value={sessionLog.sessionRpe ?? ''} onChange={(e) => updateLog(sessionKey, 'sessionRpe', e.target.value)} />
-            </label>
-            <label className="tk-logfield" style={{ minWidth: 260 }}>Нотатка тренера / про сесію
-              <input type="text" maxLength="1000" value={sessionLog.note ?? ''} onChange={(e) => updateLog(sessionKey, 'note', e.target.value)} />
-            </label>
-          </div>
+          {showJournal && (
+            <>
+              <div className="tk-journal-progress">
+                <span><b>{dayDone}/{view.days[day].items.length}</b> вправ виконано</span>
+                <span>Журнал зберігається на пристрої</span>
+              </div>
+              <div className="tk-log tk-session-log">
+                <label className="tk-logfield">Готовність до сесії 1–5
+                  <input type="number" min="1" max="5" step="1" value={sessionLog.readiness ?? ''} onChange={(e) => updateLog(sessionKey, 'readiness', e.target.value)} />
+                </label>
+                <label className="tk-logfield">Session-RPE 0–10
+                  <input type="number" min="0" max="10" step="1" value={sessionLog.sessionRpe ?? ''} onChange={(e) => updateLog(sessionKey, 'sessionRpe', e.target.value)} />
+                </label>
+                <label className="tk-logfield tk-note-field">Нотатка тренера / про сесію
+                  <input type="text" maxLength="1000" value={sessionLog.note ?? ''} onChange={(e) => updateLog(sessionKey, 'note', e.target.value)} />
+                </label>
+              </div>
+            </>
+          )}
           {view.days[day].items.map((it, i) => {
             const key = journalKey(wk, day, it.ex.id);
             return (
               <ExRow key={it.ex.id} item={it} idx={i} week={week} plan={sessionPlan}
                 heavy={isHeavy(day, i, week, view)} tech={marks.has(i)}
-                anchors={anchors} onAnchor={updateAnchor}
+                anchors={anchors} onAnchor={updateAnchor} showJournal={showJournal}
                 log={journal[key] || {}} onLog={(field, value) => updateLog(key, field, value)}
                 onCoachEdit={(field, value) => updateCoachPrescription(day, plan.days[day].items[i]?.ex.id || it.ex.id, field, value)}
                 onRemoveCustom={() => removeCustomExercise(it.ex.id)}
                 onSwap={(ex) => setSwaps((s) => ({ ...s, [day + ':' + plan.days[day].items[i].ex.id]: ex }))} />
             );
           })}
-          <button className="tk-cta" style={{ marginTop: 14 }} onClick={completeSession} disabled={!!sessionLog.done}>
+          {showJournal && <button className="tk-cta" style={{ marginTop: 14 }} onClick={completeSession} disabled={!!sessionLog.done}>
             {sessionLog.done ? 'Сесію вже збережено' : 'Завершити та зберегти сесію'}
-          </button>
+          </button>}
         </div>
 
         {week.test && (
@@ -1412,6 +1448,11 @@ function TrainingConstructorInner({ theme, onThemeToggle }) {
         )}
 
         <VolumePanel plan={view} week={week} />
+
+        {showJournal && (
+          <ProgressDashboard history={sessionHistory} onDelete={deleteSession}
+            plannedSets={view.days[day].items.reduce((sum, item, index) => sum + setsFor(item, week, sessionPlan, isHeavy(day, index, week, sessionPlan)), 0)} plannedSessionsPerWeek={profile.days} />
+        )}
 
         <div className="tk-card tk-card-dense">
           <div className="tk-eyebrow">Правила блоку</div>

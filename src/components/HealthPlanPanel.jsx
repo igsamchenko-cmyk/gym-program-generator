@@ -1,6 +1,6 @@
 import { healthProgress } from '../healthPlan.ts';
 
-export default function HealthPlanPanel({ profile, weekIndex = 0, log = {}, onChange }) {
+export default function HealthPlanPanel({ profile, weekIndex = 0, log = {}, onChange, showJournal = false }) {
   const progress = healthProgress(profile, log, weekIndex);
   const { targets } = progress;
   const field = (name, label, max = 1000) => (
@@ -22,7 +22,7 @@ export default function HealthPlanPanel({ profile, weekIndex = 0, log = {}, onCh
       <h2 className="tk-h" id="health-plan-title">Сила, аеробна активність, баланс і рухливість</h2>
       <p className="tk-p">
         Силові дні нижче — одна частина плану. Аеробні сесії мають конкретну тривалість та інтенсивність;
-        записуй фактичні хвилини після кожної.
+        фактичні хвилини можна записувати в журналі за бажанням.
       </p>
       <div className="tk-health-grid">
         <div className="tk-health-item">
@@ -48,7 +48,7 @@ export default function HealthPlanPanel({ profile, weekIndex = 0, log = {}, onCh
           <div className="tk-health-item" key={session.id}>
             <b>Сесія {index + 1} · {session.activity}</b>
             <span>{session.minutes} хв · помірна інтенсивність. {session.cue}</span>
-            {field(session.id, 'Фактично, хв', 300)}
+            {showJournal && field(session.id, 'Фактично, хв', 300)}
           </div>
         ))}
       </div>
@@ -56,26 +56,30 @@ export default function HealthPlanPanel({ profile, weekIndex = 0, log = {}, onCh
         Критерій переходу: якщо виконав щонайменше 80% плану без погіршення самопочуття, переходь до наступного тижня.
         Якщо ні — повтори поточну тривалість. Високоінтенсивні інтервали не додаються автоматично.
       </p>
-      <div className="tk-log tk-health-log">
-        {field('moderateMinutes', 'Помірна активність, хв')}
-        {field('vigorousMinutes', 'Інша висока активність, хв')}
-        {field('balanceSessions', 'Сесії балансу', 14)}
-        {field('mobilitySessions', 'Сесії рухливості', 14)}
-      </div>
-      <div className="tk-progress-list">
-        <div>
-          <span>Аеробна ціль: {progress.aerobic}/{targets.aerobicMinimum} еквівалентних хвилин</span>
-          <progress max="100" value={progress.aerobicPercent}>{progress.aerobicPercent}%</progress>
-        </div>
-        <div>
-          <span>Баланс: {progress.balance}/{targets.balanceSessions} сесій</span>
-          <progress max="100" value={progress.balancePercent}>{progress.balancePercent}%</progress>
-        </div>
-        <div>
-          <span>Рухливість: {progress.mobility}/{targets.mobilitySessions} сесій</span>
-          <progress max="100" value={progress.mobilityPercent}>{progress.mobilityPercent}%</progress>
-        </div>
-      </div>
+      {showJournal && (
+        <>
+          <div className="tk-log tk-health-log">
+            {field('moderateMinutes', 'Помірна активність, хв')}
+            {field('vigorousMinutes', 'Інша висока активність, хв')}
+            {field('balanceSessions', 'Сесії балансу', 14)}
+            {field('mobilitySessions', 'Сесії рухливості', 14)}
+          </div>
+          <div className="tk-progress-list">
+            <div>
+              <span>Аеробна ціль: {progress.aerobic}/{targets.aerobicMinimum} еквівалентних хвилин</span>
+              <progress max="100" value={progress.aerobicPercent}>{progress.aerobicPercent}%</progress>
+            </div>
+            <div>
+              <span>Баланс: {progress.balance}/{targets.balanceSessions} сесій</span>
+              <progress max="100" value={progress.balancePercent}>{progress.balancePercent}%</progress>
+            </div>
+            <div>
+              <span>Рухливість: {progress.mobility}/{targets.mobilitySessions} сесій</span>
+              <progress max="100" value={progress.mobilityPercent}>{progress.mobilityPercent}%</progress>
+            </div>
+          </div>
+        </>
+      )}
       <p className="tk-hint">Висока інтенсивність рахується приблизно ×2. Зупинись при болю у грудях, непритомності, незвичній задишці чи запамороченні.</p>
     </section>
   );
